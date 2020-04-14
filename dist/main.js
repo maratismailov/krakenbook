@@ -5,6 +5,8 @@
 
     function noop() {}
 
+    const identity = x => x;
+
     function assign(tar, src) {
     	for (const k in src) tar[k] = src[k];
     	return tar;
@@ -73,6 +75,39 @@
     	const result = {};
     	for (const k in props) if (k[0] !== '$') result[k] = props[k];
     	return result;
+    }
+
+    const tasks = new Set();
+    let running = false;
+
+    function run_tasks() {
+    	tasks.forEach(task => {
+    		if (!task[0](window.performance.now())) {
+    			tasks.delete(task);
+    			task[1]();
+    		}
+    	});
+
+    	running = tasks.size > 0;
+    	if (running) requestAnimationFrame(run_tasks);
+    }
+
+    function loop(fn) {
+    	let task;
+
+    	if (!running) {
+    		running = true;
+    		requestAnimationFrame(run_tasks);
+    	}
+
+    	return {
+    		promise: new Promise(fulfil => {
+    			tasks.add(task = [fn, fulfil]);
+    		}),
+    		abort() {
+    			tasks.delete(task);
+    		}
+    	};
     }
 
     function append(target, node) {
@@ -148,6 +183,70 @@
     	const e = document.createEvent('CustomEvent');
     	e.initCustomEvent(type, false, false, detail);
     	return e;
+    }
+
+    let stylesheet;
+    let active = 0;
+    let current_rules = {};
+
+    // https://github.com/darkskyapp/string-hash/blob/master/index.js
+    function hash(str) {
+    	let hash = 5381;
+    	let i = str.length;
+
+    	while (i--) hash = ((hash << 5) - hash) ^ str.charCodeAt(i);
+    	return hash >>> 0;
+    }
+
+    function create_rule(node, a, b, duration, delay, ease, fn, uid = 0) {
+    	const step = 16.666 / duration;
+    	let keyframes = '{\n';
+
+    	for (let p = 0; p <= 1; p += step) {
+    		const t = a + (b - a) * ease(p);
+    		keyframes += p * 100 + `%{${fn(t, 1 - t)}}\n`;
+    	}
+
+    	const rule = keyframes + `100% {${fn(b, 1 - b)}}\n}`;
+    	const name = `__svelte_${hash(rule)}_${uid}`;
+
+    	if (!current_rules[name]) {
+    		if (!stylesheet) {
+    			const style = element('style');
+    			document.head.appendChild(style);
+    			stylesheet = style.sheet;
+    		}
+
+    		current_rules[name] = true;
+    		stylesheet.insertRule(`@keyframes ${name} ${rule}`, stylesheet.cssRules.length);
+    	}
+
+    	const animation = node.style.animation || '';
+    	node.style.animation = `${animation ? `${animation}, ` : ``}${name} ${duration}ms linear ${delay}ms 1 both`;
+
+    	active += 1;
+    	return name;
+    }
+
+    function delete_rule(node, name) {
+    	node.style.animation = (node.style.animation || '')
+    		.split(', ')
+    		.filter(name
+    			? anim => anim.indexOf(name) < 0 // remove specific animation
+    			: anim => anim.indexOf('__svelte') === -1 // remove all Svelte animations
+    		)
+    		.join(', ');
+
+    	if (name && !--active) clear_rules();
+    }
+
+    function clear_rules() {
+    	requestAnimationFrame(() => {
+    		if (active) return;
+    		let i = stylesheet.cssRules.length;
+    		while (i--) stylesheet.deleteRule(i);
+    		current_rules = {};
+    	});
     }
 
     let current_component;
@@ -263,6 +362,23 @@
     	}
     }
 
+    let promise;
+
+    function wait() {
+    	if (!promise) {
+    		promise = Promise.resolve();
+    		promise.then(() => {
+    			promise = null;
+    		});
+    	}
+
+    	return promise;
+    }
+
+    function dispatch(node, direction, kind) {
+    	node.dispatchEvent(custom_event(`${direction ? 'intro' : 'outro'}${kind}`));
+    }
+
     let outros;
 
     function group_outros() {
@@ -280,6 +396,131 @@
 
     function on_outro(callback) {
     	outros.callbacks.push(callback);
+    }
+
+    function create_bidirectional_transition(node, fn, params, intro) {
+    	let config = fn(node, params);
+
+    	let t = intro ? 0 : 1;
+
+    	let running_program = null;
+    	let pending_program = null;
+    	let animation_name = null;
+
+    	function clear_animation() {
+    		if (animation_name) delete_rule(node, animation_name);
+    	}
+
+    	function init(program, duration) {
+    		const d = program.b - t;
+    		duration *= Math.abs(d);
+
+    		return {
+    			a: t,
+    			b: program.b,
+    			d,
+    			duration,
+    			start: program.start,
+    			end: program.start + duration,
+    			group: program.group
+    		};
+    	}
+
+    	function go(b) {
+    		const {
+    			delay = 0,
+    			duration = 300,
+    			easing = identity,
+    			tick: tick$$1 = noop,
+    			css
+    		} = config;
+
+    		const program = {
+    			start: window.performance.now() + delay,
+    			b
+    		};
+
+    		if (!b) {
+    			program.group = outros;
+    			outros.remaining += 1;
+    		}
+
+    		if (running_program) {
+    			pending_program = program;
+    		} else {
+    			// if this is an intro, and there's a delay, we need to do
+    			// an initial tick and/or apply CSS animation immediately
+    			if (css) {
+    				clear_animation();
+    				animation_name = create_rule(node, t, b, duration, delay, easing, css);
+    			}
+
+    			if (b) tick$$1(0, 1);
+
+    			running_program = init(program, duration);
+    			add_render_callback(() => dispatch(node, b, 'start'));
+
+    			loop(now => {
+    				if (pending_program && now > pending_program.start) {
+    					running_program = init(pending_program, duration);
+    					pending_program = null;
+
+    					dispatch(node, running_program.b, 'start');
+
+    					if (css) {
+    						clear_animation();
+    						animation_name = create_rule(node, t, running_program.b, running_program.duration, 0, easing, config.css);
+    					}
+    				}
+
+    				if (running_program) {
+    					if (now >= running_program.end) {
+    						tick$$1(t = running_program.b, 1 - t);
+    						dispatch(node, running_program.b, 'end');
+
+    						if (!pending_program) {
+    							// we're done
+    							if (running_program.b) {
+    								// intro — we can tidy up immediately
+    								clear_animation();
+    							} else {
+    								// outro — needs to be coordinated
+    								if (!--running_program.group.remaining) run_all(running_program.group.callbacks);
+    							}
+    						}
+
+    						running_program = null;
+    					}
+
+    					else if (now >= running_program.start) {
+    						const p = now - running_program.start;
+    						t = running_program.a + running_program.d * easing(p / running_program.duration);
+    						tick$$1(t, 1 - t);
+    					}
+    				}
+
+    				return !!(running_program || pending_program);
+    			});
+    		}
+    	}
+
+    	return {
+    		run(b) {
+    			if (typeof config === 'function') {
+    				wait().then(() => {
+    					config = config();
+    					go(b);
+    				});
+    			} else {
+    				go(b);
+    			}
+    		},
+
+    		end() {
+    			clear_animation();
+    			running_program = pending_program = null;
+    		}
+    	};
     }
 
     function get_spread_update(levels, updates) {
@@ -3775,6 +4016,40 @@
     var dist_5 = dist.TextNode;
     var dist_6 = dist.NodeType;
 
+    /*
+    Adapted from https://github.com/mattdesl
+    Distributed under MIT License https://github.com/mattdesl/eases/blob/master/LICENSE.md
+    */
+
+    function cubicOut(t) {
+    	const f = t - 1.0;
+    	return f * f * f + 1.0;
+    }
+
+    function fly(node, {
+    	delay = 0,
+    	duration = 400,
+    	easing = cubicOut,
+    	x = 0,
+    	y = 0,
+    	opacity = 0
+    }) {
+    	const style = getComputedStyle(node);
+    	const target_opacity = +style.opacity;
+    	const transform = style.transform === 'none' ? '' : style.transform;
+
+    	const od = target_opacity * (1 - opacity);
+
+    	return {
+    		delay,
+    		duration,
+    		easing,
+    		css: (t, u) => `
+			transform: ${transform} translate(${(1 - t) * x}px, ${(1 - t) * y}px);
+			opacity: ${target_opacity - (od * u)}`
+    	};
+    }
+
     /* src/components/Search.svelte generated by Svelte v3.4.0 */
 
     const file = "src/components/Search.svelte";
@@ -3782,23 +4057,110 @@
     function get_each_context(ctx, list, i) {
     	const child_ctx = Object.create(ctx);
     	child_ctx.result = list[i];
+    	child_ctx.index = i;
     	return child_ctx;
     }
 
-    // (262:2) {#each results as result}
-    function create_each_block(ctx) {
-    	var div, t_value = ctx.result, t;
+    // (242:4) {:else}
+    function create_else_block(ctx) {
+    	var div, t0_value = ctx.result, t0, t1, if_block_anchor, current, dispose;
+
+    	function click_handler_2() {
+    		return ctx.click_handler_2(ctx);
+    	}
+
+    	var if_block = (ctx.book_menu[ctx.index]) && create_if_block_1(ctx);
 
     	return {
     		c: function create() {
     			div = element("div");
-    			t = text(t_value);
-    			add_location(div, file, 262, 4, 7085);
+    			t0 = text(t0_value);
+    			t1 = space();
+    			if (if_block) if_block.c();
+    			if_block_anchor = empty();
+    			add_location(div, file, 242, 6, 7256);
+    			dispose = listen(div, "click", click_handler_2);
     		},
 
     		m: function mount(target, anchor) {
     			insert(target, div, anchor);
-    			append(div, t);
+    			append(div, t0);
+    			insert(target, t1, anchor);
+    			if (if_block) if_block.m(target, anchor);
+    			insert(target, if_block_anchor, anchor);
+    			current = true;
+    		},
+
+    		p: function update(changed, new_ctx) {
+    			ctx = new_ctx;
+    			if ((!current || changed.results) && t0_value !== (t0_value = ctx.result)) {
+    				set_data(t0, t0_value);
+    			}
+
+    			if (ctx.book_menu[ctx.index]) {
+    				if (!if_block) {
+    					if_block = create_if_block_1(ctx);
+    					if_block.c();
+    					if_block.i(1);
+    					if_block.m(if_block_anchor.parentNode, if_block_anchor);
+    				} else {
+    									if_block.i(1);
+    				}
+    			} else if (if_block) {
+    				group_outros();
+    				on_outro(() => {
+    					if_block.d(1);
+    					if_block = null;
+    				});
+
+    				if_block.o(1);
+    				check_outros();
+    			}
+    		},
+
+    		i: function intro(local) {
+    			if (current) return;
+    			if (if_block) if_block.i();
+    			current = true;
+    		},
+
+    		o: function outro(local) {
+    			if (if_block) if_block.o();
+    			current = false;
+    		},
+
+    		d: function destroy(detaching) {
+    			if (detaching) {
+    				detach(div);
+    				detach(t1);
+    			}
+
+    			if (if_block) if_block.d(detaching);
+
+    			if (detaching) {
+    				detach(if_block_anchor);
+    			}
+
+    			dispose();
+    		}
+    	};
+    }
+
+    // (240:4) {#if (result.includes('Найденные книги') || result.includes('Найденные писатели') || result.includes('Найденные серии'))}
+    function create_if_block(ctx) {
+    	var h2, t_value = ctx.result, t;
+
+    	return {
+    		c: function create() {
+    			h2 = element("h2");
+    			t = text(t_value);
+    			set_style(h2, "font-size", "1.5em");
+    			add_location(h2, file, 240, 6, 7195);
+    		},
+
+    		m: function mount(target, anchor) {
+    			insert(target, h2, anchor);
+    			append(h2, t);
     		},
 
     		p: function update(changed, ctx) {
@@ -3807,16 +4169,138 @@
     			}
     		},
 
+    		i: noop,
+    		o: noop,
+
+    		d: function destroy(detaching) {
+    			if (detaching) {
+    				detach(h2);
+    			}
+    		}
+    	};
+    }
+
+    // (244:6) {#if book_menu[index]}
+    function create_if_block_1(ctx) {
+    	var div, div_transition, current;
+
+    	return {
+    		c: function create() {
+    			div = element("div");
+    			div.textContent = "details add to library";
+    			set_style(div, "color", "green");
+    			add_location(div, file, 244, 6, 7348);
+    		},
+
+    		m: function mount(target, anchor) {
+    			insert(target, div, anchor);
+    			current = true;
+    		},
+
+    		i: function intro(local) {
+    			if (current) return;
+    			add_render_callback(() => {
+    				if (!div_transition) div_transition = create_bidirectional_transition(div, fly, { y: -25, duration: 500 }, true);
+    				div_transition.run(1);
+    			});
+
+    			current = true;
+    		},
+
+    		o: function outro(local) {
+    			if (!div_transition) div_transition = create_bidirectional_transition(div, fly, { y: -25, duration: 500 }, false);
+    			div_transition.run(0);
+
+    			current = false;
+    		},
+
     		d: function destroy(detaching) {
     			if (detaching) {
     				detach(div);
+    				if (div_transition) div_transition.end();
+    			}
+    		}
+    	};
+    }
+
+    // (239:2) {#each results as result, index}
+    function create_each_block(ctx) {
+    	var current_block_type_index, if_block, if_block_anchor, current;
+
+    	var if_block_creators = [
+    		create_if_block,
+    		create_else_block
+    	];
+
+    	var if_blocks = [];
+
+    	function select_block_type(ctx) {
+    		if ((ctx.result.includes('Найденные книги') || ctx.result.includes('Найденные писатели') || ctx.result.includes('Найденные серии'))) return 0;
+    		return 1;
+    	}
+
+    	current_block_type_index = select_block_type(ctx);
+    	if_block = if_blocks[current_block_type_index] = if_block_creators[current_block_type_index](ctx);
+
+    	return {
+    		c: function create() {
+    			if_block.c();
+    			if_block_anchor = empty();
+    		},
+
+    		m: function mount(target, anchor) {
+    			if_blocks[current_block_type_index].m(target, anchor);
+    			insert(target, if_block_anchor, anchor);
+    			current = true;
+    		},
+
+    		p: function update(changed, ctx) {
+    			var previous_block_index = current_block_type_index;
+    			current_block_type_index = select_block_type(ctx);
+    			if (current_block_type_index === previous_block_index) {
+    				if_blocks[current_block_type_index].p(changed, ctx);
+    			} else {
+    				group_outros();
+    				on_outro(() => {
+    					if_blocks[previous_block_index].d(1);
+    					if_blocks[previous_block_index] = null;
+    				});
+    				if_block.o(1);
+    				check_outros();
+
+    				if_block = if_blocks[current_block_type_index];
+    				if (!if_block) {
+    					if_block = if_blocks[current_block_type_index] = if_block_creators[current_block_type_index](ctx);
+    					if_block.c();
+    				}
+    				if_block.i(1);
+    				if_block.m(if_block_anchor.parentNode, if_block_anchor);
+    			}
+    		},
+
+    		i: function intro(local) {
+    			if (current) return;
+    			if (if_block) if_block.i();
+    			current = true;
+    		},
+
+    		o: function outro(local) {
+    			if (if_block) if_block.o();
+    			current = false;
+    		},
+
+    		d: function destroy(detaching) {
+    			if_blocks[current_block_type_index].d(detaching);
+
+    			if (detaching) {
+    				detach(if_block_anchor);
     			}
     		}
     	};
     }
 
     function create_fragment(ctx) {
-    	var t0, div0, input0, t1, button0, t3, div2, label0, input1, t4, span0, t5, span1, t7, span2, t9, label1, input2, t10, span3, t11, span4, t13, span5, t15, label2, input3, t16, span6, t17, span7, t19, span8, t21, div1, button1, t22, t23, p, t24, t25_value = ctx.page_number + 1, t25, t26, t27, t28, button2, t29, t30, div3, img, t31, div4, t32, div5, dispose;
+    	var t0, div0, input0, t1, button0, t3, div2, label0, input1, t4, span0, t5, span1, t7, span2, t9, label1, input2, t10, span3, t11, span4, t13, span5, t15, label2, input3, t16, span6, t17, span7, t19, span8, t21, div1, button1, t22, t23, p, t24, t25_value = ctx.page_number + 1, t25, t26, t27, t28, button2, t29, t30, div3, img, t31, div4, t32, div5, t33, t34, div6, current, dispose;
 
     	var each_value = ctx.results;
 
@@ -3824,6 +4308,19 @@
 
     	for (var i = 0; i < each_value.length; i += 1) {
     		each_blocks[i] = create_each_block(get_each_context(ctx, each_value, i));
+    	}
+
+    	function outro_block(i, detaching, local) {
+    		if (each_blocks[i]) {
+    			if (detaching) {
+    				on_outro(() => {
+    					each_blocks[i].d(detaching);
+    					each_blocks[i] = null;
+    				});
+    			}
+
+    			each_blocks[i].o(local);
+    		}
     	}
 
     	return {
@@ -3893,62 +4390,66 @@
 
     			t32 = space();
     			div5 = element("div");
+    			t33 = text(ctx.results);
+    			t34 = space();
+    			div6 = element("div");
     			document.title = "kraken book";
     			input0.id = "search_input";
     			input0.className = "bg-white focus:outline-none border border-gray-300 rounded-lg py-2\n    px-4 w-9 static m-2";
     			attr(input0, "type", "search");
     			input0.placeholder = "Enter book name";
-    			add_location(input0, file, 178, 2, 5459);
+    			add_location(input0, file, 187, 2, 5696);
     			button0.className = "focus:outline-none bg-mainbtn m-2 static rounded-lg py-2 px-4";
-    			add_location(button0, file, 185, 2, 5672);
+    			add_location(button0, file, 194, 2, 5909);
     			div0.className = "";
-    			add_location(div0, file, 177, 0, 5442);
+    			add_location(div0, file, 186, 0, 5679);
     			attr(input1, "type", "checkbox");
     			input1.className = "svelte-1yvib7k";
-    			add_location(input1, file, 194, 4, 5877);
+    			add_location(input1, file, 203, 4, 6114);
     			span0.className = "slider round svelte-1yvib7k";
-    			add_location(span0, file, 195, 4, 5937);
+    			add_location(span0, file, 204, 4, 6174);
     			label0.className = "switch svelte-1yvib7k";
-    			add_location(label0, file, 193, 2, 5850);
-    			add_location(span1, file, 197, 2, 5980);
-    			add_location(span2, file, 198, 2, 6001);
+    			add_location(label0, file, 202, 2, 6087);
+    			add_location(span1, file, 206, 2, 6217);
+    			add_location(span2, file, 207, 2, 6238);
     			attr(input2, "type", "checkbox");
     			input2.className = "svelte-1yvib7k";
-    			add_location(input2, file, 200, 4, 6050);
+    			add_location(input2, file, 209, 4, 6287);
     			span3.className = "slider round svelte-1yvib7k";
-    			add_location(span3, file, 201, 4, 6110);
+    			add_location(span3, file, 210, 4, 6347);
     			label1.className = "switch svelte-1yvib7k";
-    			add_location(label1, file, 199, 2, 6023);
-    			add_location(span4, file, 203, 2, 6153);
-    			add_location(span5, file, 204, 2, 6175);
+    			add_location(label1, file, 208, 2, 6260);
+    			add_location(span4, file, 212, 2, 6390);
+    			add_location(span5, file, 213, 2, 6412);
     			attr(input3, "type", "checkbox");
     			input3.className = "svelte-1yvib7k";
-    			add_location(input3, file, 206, 4, 6224);
+    			add_location(input3, file, 215, 4, 6461);
     			span6.className = "slider round svelte-1yvib7k";
-    			add_location(span6, file, 207, 4, 6282);
+    			add_location(span6, file, 216, 4, 6519);
     			label2.className = "switch svelte-1yvib7k";
-    			add_location(label2, file, 205, 2, 6197);
-    			add_location(span7, file, 209, 2, 6325);
-    			add_location(span8, file, 210, 2, 6346);
+    			add_location(label2, file, 214, 2, 6434);
+    			add_location(span7, file, 218, 2, 6562);
+    			add_location(span8, file, 219, 2, 6583);
     			button1.className = "" + ctx.prev_button + " svelte-1yvib7k";
-    			add_location(button1, file, 213, 4, 6393);
+    			add_location(button1, file, 222, 4, 6630);
     			p.className = "" + ctx.is_pages + " svelte-1yvib7k";
-    			add_location(p, file, 216, 4, 6495);
+    			add_location(p, file, 225, 4, 6732);
     			button2.className = "" + ctx.next_button + " svelte-1yvib7k";
-    			add_location(button2, file, 217, 4, 6567);
+    			add_location(button2, file, 226, 4, 6804);
     			div1.className = "Pages svelte-1yvib7k";
-    			add_location(div1, file, 212, 2, 6369);
+    			add_location(div1, file, 221, 2, 6606);
     			div2.className = "m-2 text-maintxt";
-    			add_location(div2, file, 192, 0, 5817);
+    			add_location(div2, file, 201, 0, 6054);
     			img.src = "./assets/loading.svg";
     			img.alt = "Loading...";
-    			add_location(img, file, 224, 2, 6704);
+    			add_location(img, file, 233, 2, 6941);
     			div3.className = "" + ctx.loading + " svelte-1yvib7k";
-    			add_location(div3, file, 223, 0, 6680);
+    			add_location(div3, file, 232, 0, 6917);
     			div4.className = "" + ctx.results_css + " svelte-1yvib7k";
-    			add_location(div4, file, 260, 0, 7027);
-    			set_style(div5, "padding-bottom", "80px");
-    			add_location(div5, file, 265, 0, 7122);
+    			add_location(div4, file, 237, 0, 7002);
+    			add_location(div5, file, 251, 0, 7501);
+    			set_style(div6, "padding-bottom", "80px");
+    			add_location(div6, file, 252, 0, 7522);
 
     			dispose = [
     				listen(window, "keydown", ctx.handleEnter),
@@ -4037,6 +4538,10 @@
 
     			insert(target, t32, anchor);
     			insert(target, div5, anchor);
+    			append(div5, t33);
+    			insert(target, t34, anchor);
+    			insert(target, div6, anchor);
+    			current = true;
     		},
 
     		p: function update(changed, ctx) {
@@ -4045,31 +4550,31 @@
     			if (changed.author_checked) input2.checked = ctx.author_checked;
     			if (changed.book_checked) input3.checked = ctx.book_checked;
 
-    			if (changed.prev_button) {
+    			if (!current || changed.prev_button) {
     				button1.className = "" + ctx.prev_button + " svelte-1yvib7k";
     			}
 
-    			if ((changed.page_number) && t25_value !== (t25_value = ctx.page_number + 1)) {
+    			if ((!current || changed.page_number) && t25_value !== (t25_value = ctx.page_number + 1)) {
     				set_data(t25, t25_value);
     			}
 
-    			if (changed.pages_total) {
+    			if (!current || changed.pages_total) {
     				set_data(t27, ctx.pages_total);
     			}
 
-    			if (changed.is_pages) {
+    			if (!current || changed.is_pages) {
     				p.className = "" + ctx.is_pages + " svelte-1yvib7k";
     			}
 
-    			if (changed.next_button) {
+    			if (!current || changed.next_button) {
     				button2.className = "" + ctx.next_button + " svelte-1yvib7k";
     			}
 
-    			if (changed.loading) {
+    			if (!current || changed.loading) {
     				div3.className = "" + ctx.loading + " svelte-1yvib7k";
     			}
 
-    			if (changed.results) {
+    			if (changed.results || changed.book_menu) {
     				each_value = ctx.results;
 
     				for (var i = 0; i < each_value.length; i += 1) {
@@ -4077,26 +4582,42 @@
 
     					if (each_blocks[i]) {
     						each_blocks[i].p(changed, child_ctx);
+    						each_blocks[i].i(1);
     					} else {
     						each_blocks[i] = create_each_block(child_ctx);
     						each_blocks[i].c();
+    						each_blocks[i].i(1);
     						each_blocks[i].m(div4, null);
     					}
     				}
 
-    				for (; i < each_blocks.length; i += 1) {
-    					each_blocks[i].d(1);
-    				}
-    				each_blocks.length = each_value.length;
+    				group_outros();
+    				for (; i < each_blocks.length; i += 1) outro_block(i, 1, 1);
+    				check_outros();
     			}
 
-    			if (changed.results_css) {
+    			if (!current || changed.results_css) {
     				div4.className = "" + ctx.results_css + " svelte-1yvib7k";
+    			}
+
+    			if (!current || changed.results) {
+    				set_data(t33, ctx.results);
     			}
     		},
 
-    		i: noop,
-    		o: noop,
+    		i: function intro(local) {
+    			if (current) return;
+    			for (var i = 0; i < each_value.length; i += 1) each_blocks[i].i();
+
+    			current = true;
+    		},
+
+    		o: function outro(local) {
+    			each_blocks = each_blocks.filter(Boolean);
+    			for (let i = 0; i < each_blocks.length; i += 1) outro_block(i, 0);
+
+    			current = false;
+    		},
 
     		d: function destroy(detaching) {
     			if (detaching) {
@@ -4115,6 +4636,8 @@
     			if (detaching) {
     				detach(t32);
     				detach(div5);
+    				detach(t34);
+    				detach(div6);
     			}
 
     			run_all(dispose);
@@ -4138,6 +4661,7 @@
       let is_pages = "Hidden";
       let loading = "Hidden";
       let results_css = "Hidden";
+      let book_menu = [];
 
       function handleEnter(event) {
         // key = event.key;
@@ -4280,6 +4804,9 @@
           elem = dist_3(elem);
           return elem.structuredText;
         });
+        $$invalidate('book_menu', book_menu = array5.map(() => {
+          return null
+        }));
         // console.log('array6 is', array6);
         // result = parse(array5)
         $$invalidate('results', results = array6);
@@ -4287,6 +4814,10 @@
         // this.setState({ result2: array6, pagesTotal: pagesTotal.length / 2 });
         // result2 = array6
         $$invalidate('pages_total', pages_total = pages_total.length / 2);
+        console.log(book_menu);
+      }
+      function showBookMenu(index) {
+        book_menu[index] = !book_menu[index]; $$invalidate('book_menu', book_menu);
       }
 
     	function input0_input_handler() {
@@ -4317,6 +4848,10 @@
     		return changePageNumber(1);
     	}
 
+    	function click_handler_2({ index }) {
+    		return showBookMenu(index);
+    	}
+
     	return {
     		querie,
     		page_number,
@@ -4330,24 +4865,27 @@
     		is_pages,
     		loading,
     		results_css,
+    		book_menu,
     		handleEnter,
     		changePageNumber,
     		handleSearch,
     		handleNewSearch,
     		refineResult,
+    		showBookMenu,
     		input0_input_handler,
     		input1_change_handler,
     		input2_change_handler,
     		input3_change_handler,
     		click_handler,
-    		click_handler_1
+    		click_handler_1,
+    		click_handler_2
     	};
     }
 
     class Search extends SvelteComponentDev {
     	constructor(options) {
     		super(options);
-    		init(this, options, instance, create_fragment, safe_not_equal, ["changePageNumber", "handleSearch", "handleNewSearch", "refineResult"]);
+    		init(this, options, instance, create_fragment, safe_not_equal, ["changePageNumber", "handleSearch", "handleNewSearch", "refineResult", "showBookMenu"]);
 
     		const { ctx } = this.$$;
     		const props = options.props || {};
@@ -4362,6 +4900,9 @@
     		}
     		if (ctx.refineResult === undefined && !('refineResult' in props)) {
     			console.warn("<Search> was created without expected prop 'refineResult'");
+    		}
+    		if (ctx.showBookMenu === undefined && !('showBookMenu' in props)) {
+    			console.warn("<Search> was created without expected prop 'showBookMenu'");
     		}
     	}
 
@@ -4394,6 +4935,14 @@
     	}
 
     	set refineResult(value) {
+    		throw new Error("<Search>: Props cannot be set directly on the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
+    	}
+
+    	get showBookMenu() {
+    		return this.$$.ctx.showBookMenu;
+    	}
+
+    	set showBookMenu(value) {
     		throw new Error("<Search>: Props cannot be set directly on the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
     	}
     }
@@ -5151,12 +5700,12 @@
     });
 
     // (40:0) {#if $activeRoute !== null && $activeRoute.route === route}
-    function create_if_block(ctx) {
+    function create_if_block$1(ctx) {
     	var current_block_type_index, if_block, if_block_anchor, current;
 
     	var if_block_creators = [
-    		create_if_block_1,
-    		create_else_block
+    		create_if_block_1$1,
+    		create_else_block$1
     	];
 
     	var if_blocks = [];
@@ -5227,7 +5776,7 @@
     }
 
     // (43:2) {:else}
-    function create_else_block(ctx) {
+    function create_else_block$1(ctx) {
     	var current;
 
     	const default_slot_1 = ctx.$$slots.default;
@@ -5274,7 +5823,7 @@
     }
 
     // (41:2) {#if component !== null}
-    function create_if_block_1(ctx) {
+    function create_if_block_1$1(ctx) {
     	var switch_instance_anchor, current;
 
     	var switch_instance_spread_levels = [
@@ -5374,7 +5923,7 @@
     function create_fragment$4(ctx) {
     	var if_block_anchor, current;
 
-    	var if_block = (ctx.$activeRoute !== null && ctx.$activeRoute.route === ctx.route) && create_if_block(ctx);
+    	var if_block = (ctx.$activeRoute !== null && ctx.$activeRoute.route === ctx.route) && create_if_block$1(ctx);
 
     	return {
     		c: function create() {
@@ -5398,7 +5947,7 @@
     					if_block.p(changed, ctx);
     					if_block.i(1);
     				} else {
-    					if_block = create_if_block(ctx);
+    					if_block = create_if_block$1(ctx);
     					if_block.c();
     					if_block.i(1);
     					if_block.m(if_block_anchor.parentNode, if_block_anchor);

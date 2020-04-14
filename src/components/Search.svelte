@@ -2,6 +2,7 @@
   import axios from "axios";
   import { parse } from "node-html-parser";
   import { beforeUpdate, afterUpdate } from "svelte";
+  import { fly } from 'svelte/transition';
 
   let querie = null;
   let page_number = 0;
@@ -16,6 +17,7 @@
   let is_pages = "Hidden";
   let loading = "Hidden";
   let results_css = "Hidden";
+  let book_menu = []
 
   function handleEnter(event) {
     // key = event.key;
@@ -158,6 +160,9 @@
       elem = parse(elem);
       return elem.structuredText;
     });
+    book_menu = array5.map(() => {
+      return null
+    })
     // console.log('array6 is', array6);
     // result = parse(array5)
     results = array6;
@@ -165,6 +170,10 @@
     // this.setState({ result2: array6, pagesTotal: pagesTotal.length / 2 });
     // result2 = array6
     pages_total = pages_total.length / 2;
+    console.log(book_menu);
+  }
+  export function showBookMenu(index) {
+    book_menu[index] = !book_menu[index]
   }
 </script>
 
@@ -298,42 +307,20 @@
   <img src="./assets/loading.svg" alt="Loading..." />
 </div>
 
-<!-- <table>
-<tr>
-<td>
- <label class="switch">
-    <input type="checkbox" />
-    <span class="slider round" />
-  </label>
-</td>
-<td>
-Серии
-</td>
-<td>
-ch2
-</td>
-<td>
-Авторы
-</td>
 
-<td>
-ch3
-</td>
-<td>
-Книги
-</td>
-<td>
-ch4
-</td>
-<td>
-Жанры
-</td>
-</tr>
-
-</table> -->
 <div class={results_css}>
-  {#each results as result}
-    <div>{result}</div>
+  {#each results as result, index}
+    {#if (result.includes('Найденные книги') || result.includes('Найденные писатели') || result.includes('Найденные серии'))}
+      <h2 style="font-size: 1.5em">{result}</h2>
+    {:else}
+      <div on:click={() => showBookMenu(index)}>{result}</div>
+      {#if book_menu[index]}
+      <div transition:fly="{{ y: -25, duration: 500 }}" style="color: green">
+      details add to library
+      </div>
+      {/if}
+    {/if}
   {/each}
 </div>
-<div style="padding-bottom: 80px;"></div>
+<div>{results}</div>
+<div style="padding-bottom: 80px;" />
