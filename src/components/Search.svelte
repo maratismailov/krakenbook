@@ -1,6 +1,7 @@
 <script>
   import axios from "axios";
   import { parse } from "node-html-parser";
+  import { beforeUpdate, afterUpdate } from "svelte";
 
   let querie = null;
   let page_number = 0;
@@ -9,6 +10,13 @@
   let series_checked = false;
   let author_checked = false;
   let book_checked = true;
+  let pages_total = 0;
+  let prev_button = "Hidden";
+  let next_button = "Hidden";
+  let is_pages = "Hidden";
+  let loading = "Hidden";
+  let results_css = "Hidden";
+
   function handleEnter(event) {
     // key = event.key;
     let key_code = event.keyCode;
@@ -18,7 +26,36 @@
     }
   }
 
+  beforeUpdate(() => {
+    prev_button = "Hidden";
+    if (page_number > 0) {
+      prev_button =
+        "focus:outline-none bg-mainbtn m-2 static rounded-lg py-2 px-4";
+    }
+
+    next_button =
+      "focus:outline-none bg-mainbtn m-2 static rounded-lg py-2 px-4";
+    if (page_number >= pages_total - 1) {
+      next_button = "Hidden";
+    }
+
+    is_pages = "Hidden";
+    if (pages_total !== 0) {
+      is_pages =
+        "focus:outline-none bg-mainbtn m-2 static rounded-lg py-2 px-4";
+    }
+    // determine whether we should auto-scroll
+    // once the DOM is updated...
+  });
+
+  export function changePageNumber(arg) {
+    page_number += arg;
+    handleSearch();
+  }
+
   export function handleSearch() {
+    results_css = "Hidden";
+    loading = null;
     let pre_querie = querie.replace(/ /g, "+");
     if (series_checked) {
       pre_querie = pre_querie + "&chs=on";
@@ -51,6 +88,7 @@
   }
 
   export function refineResult() {
+    loading = "Hidden";
     const result0 = String(result);
     const result1 = result0.substring(
       result.indexOf('<h1 class="title">Поиск книг</h1>') + 0
@@ -61,7 +99,7 @@
     );
     const array1 = result2.split("\n");
     const array2 = array1.filter(String);
-    let pagesTotal = array2.filter(elem => {
+    pages_total = array2.filter(elem => {
       if (
         elem.includes('class="pager"') ||
         elem.includes('<li class="pager-item"')
@@ -69,8 +107,6 @@
         return true;
       }
     });
-    // console.log(pagesTotal.length);
-    // console.log(pagesTotal);
 
     const array3 = array2.filter(elem => {
       if (elem.includes('h1 class="title"')) {
@@ -104,20 +140,16 @@
       elem = elem.replace("</b>", "");
       elem = elem.replace(/<a href="\//g, '<a href="http://flibusta.is/');
 
-      if (elem.includes("flibusta.is/b")) {
-        // elem = elem + elem.replace(elem.indexOf('/b/')+3, (elem.indexOf('/b/')+3)+'/fb2')
-
-        elem =
-          elem +
-          elem.substring(elem.indexOf("<a href"), elem.indexOf('">')) +
-          '/fb2">fb2 </a>' +
-          elem.substring(elem.indexOf("<a href"), elem.indexOf('">')) +
-          '/epub">epub </a>' +
-          elem.substring(elem.indexOf("<a href"), elem.indexOf('">')) +
-          '/mobi">mobi</a>';
-
-        // + <a href="http://flibusta.is/b/530436/fb2">fb2</a>)
-      }
+      // if (elem.includes("flibusta.is/b")) {
+      //   elem =
+      //     elem +
+      //     elem.substring(elem.indexOf("<a href"), elem.indexOf('">')) +
+      //     '/fb2">fb2 </a>' +
+      //     elem.substring(elem.indexOf("<a href"), elem.indexOf('">')) +
+      //     '/epub">epub </a>' +
+      //     elem.substring(elem.indexOf("<a href"), elem.indexOf('">')) +
+      //     '/mobi">mobi</a>';
+      // }
 
       return elem;
     });
@@ -129,9 +161,10 @@
     // console.log('array6 is', array6);
     // result = parse(array5)
     results = array6;
+    results_css = "text-maintxt m-2";
     // this.setState({ result2: array6, pagesTotal: pagesTotal.length / 2 });
     // result2 = array6
-    pagesTotal = pagesTotal.length / 2;
+    pages_total = pages_total.length / 2;
   }
 </script>
 
@@ -195,6 +228,19 @@
   .slider.round:before {
     border-radius: 50%;
   }
+
+  .Pages {
+    display: flex;
+  }
+
+  .Hidden {
+    display: none;
+  }
+
+  .Button {
+    height: 50%;
+    margin: 1%;
+  }
 </style>
 
 <svelte:head>
@@ -237,6 +283,19 @@
   <span>Книги</span>
   <span>&nbsp;</span>
 
+  <div class="Pages">
+    <button class={prev_button} on:click={() => changePageNumber(-1)}>
+      Предыдущая
+    </button>
+    <p class={is_pages}>Страница {page_number + 1} из {pages_total}</p>
+    <button class={next_button} on:click={() => changePageNumber(1)}>
+      Следующая
+    </button>
+  </div>
+
+</div>
+<div class={loading}>
+  <img src="./assets/loading.svg" alt="Loading..." />
 </div>
 
 <!-- <table>
@@ -272,8 +331,9 @@ ch4
 </tr>
 
 </table> -->
-<div class="text-maintxt">
+<div class={results_css}>
   {#each results as result}
     <div>{result}</div>
   {/each}
 </div>
+<div style="padding-bottom: 80px;"></div>

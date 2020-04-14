@@ -6,8 +6,8 @@
   "scripts": {
     "build": "rollup -c",
     "build:auto": "rollup -c -w",
-    "serve": "sirv dist",
-    "serve:dev": "sirv dist --dev",
+    "serve": "sirv dist -s",
+    "serve:dev": "sirv dist --dev -s",
     "dev": "run-p build:auto serve:dev",
     "now-build": "rollup -c",
     "test": "cypress open"
@@ -56,6 +56,7 @@
   },
   "dependencies": {
     "axios": "^0.19.2",
-    "node-html-parser": "^1.2.14"
+    "node-html-parser": "^1.2.14",
+    "svelte-routing": "^1.4.2"
   }
 }
