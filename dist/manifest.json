@@ -1,6 +1,6 @@
 {
-  "name": "Svelte PWA Tailwind starter",
-  "short_name": "SveltePWAStarter",
+  "name": "krakenbook",
+  "short_name": "krakenbook",
   "theme_color": "#5bd1d7",
   "background_color": "#f6f5f5",
   "display": "standalone",
@@ -18,5 +18,20 @@
       "type": "image/png"
     }
   ],
-  "splash_pages": null
+  "splash_pages": {
+    "name": "krakenbook",
+    "background_color": "#1e1e1e",
+    "icons": [
+      {
+        "src": "/assets/splash192.png",
+        "sizes": "192x192",
+        "type": "image/png"
+      },
+      {
+        "src": "/assets/splash512.png",
+        "sizes": "512x512",
+        "type": "image/png"
+      }
+    ]
+  }
 }

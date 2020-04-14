@@ -1,7 +1,7 @@
 {
   "name": "krakenbook",
   "version": "1.0.0",
-  "description": "A starter for bulding Svelte web apps, with PostCSS support.",
+  "description": "krakenbook",
   "main": " ",
   "scripts": {
     "build": "rollup -c",
@@ -52,8 +52,7 @@
     "svelte": "^3.4.0",
     "svelte-preprocess": "^2.9.0",
     "svelte-preprocess-postcss": "^1.0.0",
-    "tailwindcss": "^1.0.1",
-    "tailwindcss-toggle": "github:TowelSoftware/tailwindcss-toggle"
+    "tailwindcss": "^1.0.1"
   },
   "dependencies": {
     "axios": "^0.19.2",
