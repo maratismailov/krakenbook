@@ -4061,7 +4061,7 @@
   	return child_ctx;
   }
 
-  // (242:4) {:else}
+  // (255:4) {:else}
   function create_else_block(ctx) {
   	var div, t0_value = ctx.result, t0, t1, if_block_anchor, current, dispose;
 
@@ -4078,7 +4078,7 @@
   			t1 = space();
   			if (if_block) if_block.c();
   			if_block_anchor = empty();
-  			add_location(div, file, 242, 6, 7256);
+  			add_location(div, file, 255, 6, 7617);
   			dispose = listen(div, "click", click_handler_2);
   		},
 
@@ -4098,13 +4098,14 @@
   			}
 
   			if (ctx.book_menu[ctx.index]) {
-  				if (!if_block) {
+  				if (if_block) {
+  					if_block.p(changed, ctx);
+  					if_block.i(1);
+  				} else {
   					if_block = create_if_block_1(ctx);
   					if_block.c();
   					if_block.i(1);
   					if_block.m(if_block_anchor.parentNode, if_block_anchor);
-  				} else {
-  									if_block.i(1);
   				}
   			} else if (if_block) {
   				group_outros();
@@ -4146,7 +4147,7 @@
   	};
   }
 
-  // (240:4) {#if (result.includes('Найденные книги') || result.includes('Найденные писатели') || result.includes('Найденные серии'))}
+  // (253:4) {#if result.includes('Найденные книги') || result.includes('Найденные писатели') || result.includes('Найденные серии')}
   function create_if_block(ctx) {
   	var h2, t_value = ctx.result, t;
 
@@ -4155,7 +4156,7 @@
   			h2 = element("h2");
   			t = text(t_value);
   			set_style(h2, "font-size", "1.5em");
-  			add_location(h2, file, 240, 6, 7195);
+  			add_location(h2, file, 253, 6, 7556);
   		},
 
   		m: function mount(target, anchor) {
@@ -4180,21 +4181,106 @@
   	};
   }
 
-  // (244:6) {#if book_menu[index]}
+  // (257:6) {#if book_menu[index]}
   function create_if_block_1(ctx) {
-  	var div, div_transition, current;
+  	var div, button0, img0, t0, button1, img1, t1, img2, t2, button2, img3, div_transition, t3, if_block_anchor, current, dispose;
+
+  	function click_handler_3() {
+  		return ctx.click_handler_3(ctx);
+  	}
+
+  	function click_handler_4() {
+  		return ctx.click_handler_4(ctx);
+  	}
+
+  	function click_handler_5() {
+  		return ctx.click_handler_5(ctx);
+  	}
+
+  	var if_block = (ctx.show_details[ctx.index]) && create_if_block_2(ctx);
 
   	return {
   		c: function create() {
   			div = element("div");
-  			div.textContent = "details add to library";
+  			button0 = element("button");
+  			img0 = element("img");
+  			t0 = space();
+  			button1 = element("button");
+  			img1 = element("img");
+  			t1 = space();
+  			img2 = element("img");
+  			t2 = space();
+  			button2 = element("button");
+  			img3 = element("img");
+  			t3 = space();
+  			if (if_block) if_block.c();
+  			if_block_anchor = empty();
+  			set_style(img0, "max-height", "1em");
+  			img0.src = "./assets/details.svg";
+  			img0.alt = "details";
+  			add_location(img0, file, 261, 12, 7957);
+  			button0.className = "focus:outline-none bg-mainbtn m-2 static rounded-lg py-2 px-4";
+  			add_location(button0, file, 258, 10, 7806);
+  			set_style(img1, "max-height", "1em");
+  			img1.src = "./assets/library.svg";
+  			img1.alt = "library";
+  			add_location(img1, file, 267, 12, 8241);
+  			set_style(img2, "max-height", "1em");
+  			img2.src = "./assets/add.svg";
+  			img2.alt = "add to";
+  			add_location(img2, file, 268, 12, 8324);
+  			set_style(button1, "display", "flex");
+  			button1.className = "focus:outline-none bg-mainbtn m-2 static rounded-lg py-2 px-4";
+  			add_location(button1, file, 263, 10, 8058);
+  			set_style(img3, "max-height", "1em");
+  			img3.src = "./assets/download.svg";
+  			img3.alt = "download";
+  			add_location(img3, file, 273, 12, 8571);
+  			button2.className = "focus:outline-none bg-mainbtn m-2 static rounded-lg py-2 px-4";
+  			add_location(button2, file, 270, 10, 8420);
   			set_style(div, "color", "green");
-  			add_location(div, file, 244, 6, 7348);
+  			set_style(div, "display", "flex");
+  			add_location(div, file, 257, 8, 7711);
+
+  			dispose = [
+  				listen(button0, "click", click_handler_3),
+  				listen(button1, "click", click_handler_4),
+  				listen(button2, "click", click_handler_5)
+  			];
   		},
 
   		m: function mount(target, anchor) {
   			insert(target, div, anchor);
+  			append(div, button0);
+  			append(button0, img0);
+  			append(div, t0);
+  			append(div, button1);
+  			append(button1, img1);
+  			append(button1, t1);
+  			append(button1, img2);
+  			append(div, t2);
+  			append(div, button2);
+  			append(button2, img3);
+  			insert(target, t3, anchor);
+  			if (if_block) if_block.m(target, anchor);
+  			insert(target, if_block_anchor, anchor);
   			current = true;
+  		},
+
+  		p: function update(changed, new_ctx) {
+  			ctx = new_ctx;
+  			if (ctx.show_details[ctx.index]) {
+  				if (if_block) {
+  					if_block.p(changed, ctx);
+  				} else {
+  					if_block = create_if_block_2(ctx);
+  					if_block.c();
+  					if_block.m(if_block_anchor.parentNode, if_block_anchor);
+  				}
+  			} else if (if_block) {
+  				if_block.d(1);
+  				if_block = null;
+  			}
   		},
 
   		i: function intro(local) {
@@ -4218,12 +4304,49 @@
   			if (detaching) {
   				detach(div);
   				if (div_transition) div_transition.end();
+  				detach(t3);
+  			}
+
+  			if (if_block) if_block.d(detaching);
+
+  			if (detaching) {
+  				detach(if_block_anchor);
+  			}
+
+  			run_all(dispose);
+  		}
+  	};
+  }
+
+  // (277:8) {#if show_details[index]}
+  function create_if_block_2(ctx) {
+  	var div, t0_value = ctx.details[ctx.index], t0, t1;
+
+  	return {
+  		c: function create() {
+  			div = element("div");
+  			t0 = text(t0_value);
+  			t1 = text("\n          details");
+  			add_location(div, file, 277, 8, 8721);
+  		},
+
+  		m: function mount(target, anchor) {
+  			insert(target, div, anchor);
+  			append(div, t0);
+  			append(div, t1);
+  		},
+
+  		p: noop,
+
+  		d: function destroy(detaching) {
+  			if (detaching) {
+  				detach(div);
   			}
   		}
   	};
   }
 
-  // (239:2) {#each results as result, index}
+  // (252:2) {#each results as result, index}
   function create_each_block(ctx) {
   	var current_block_type_index, if_block, if_block_anchor, current;
 
@@ -4235,7 +4358,7 @@
   	var if_blocks = [];
 
   	function select_block_type(ctx) {
-  		if ((ctx.result.includes('Найденные книги') || ctx.result.includes('Найденные писатели') || ctx.result.includes('Найденные серии'))) return 0;
+  		if (ctx.result.includes('Найденные книги') || ctx.result.includes('Найденные писатели') || ctx.result.includes('Найденные серии')) return 0;
   		return 1;
   	}
 
@@ -4300,7 +4423,7 @@
   }
 
   function create_fragment(ctx) {
-  	var t0, div0, input0, t1, button0, t3, div2, label0, input1, t4, span0, t5, span1, t7, span2, t9, label1, input2, t10, span3, t11, span4, t13, span5, t15, label2, input3, t16, span6, t17, span7, t19, span8, t21, div1, button1, t22, t23, p, t24, t25_value = ctx.page_number + 1, t25, t26, t27, t28, button2, t29, t30, div3, img, t31, div4, t32, div5, t33, t34, div6, current, dispose;
+  	var t0, div0, input0, t1, button0, t3, div2, label0, input1, t4, span0, t5, span1, t7, span2, t9, label1, input2, t10, span3, t11, span4, t13, span5, t15, label2, input3, t16, span6, t17, span7, t19, span8, t21, div1, button1, t22, t23, p, t24, t25_value = ctx.page_number + 1, t25, t26, t27, t28, button2, t29, t30, div3, img, t31, div4, t32, div5, current, dispose;
 
   	var each_value = ctx.results;
 
@@ -4390,66 +4513,62 @@
 
   			t32 = space();
   			div5 = element("div");
-  			t33 = text(ctx.results);
-  			t34 = space();
-  			div6 = element("div");
   			document.title = "kraken book";
   			input0.id = "search_input";
   			input0.className = "bg-white focus:outline-none border border-gray-300 rounded-lg py-2\n    px-4 w-9 static m-2";
   			attr(input0, "type", "search");
   			input0.placeholder = "Enter book name";
-  			add_location(input0, file, 187, 2, 5696);
+  			add_location(input0, file, 201, 2, 6060);
   			button0.className = "focus:outline-none bg-mainbtn m-2 static rounded-lg py-2 px-4";
-  			add_location(button0, file, 194, 2, 5909);
+  			add_location(button0, file, 208, 2, 6273);
   			div0.className = "";
-  			add_location(div0, file, 186, 0, 5679);
+  			add_location(div0, file, 200, 0, 6043);
   			attr(input1, "type", "checkbox");
   			input1.className = "svelte-1yvib7k";
-  			add_location(input1, file, 203, 4, 6114);
+  			add_location(input1, file, 217, 4, 6478);
   			span0.className = "slider round svelte-1yvib7k";
-  			add_location(span0, file, 204, 4, 6174);
+  			add_location(span0, file, 218, 4, 6538);
   			label0.className = "switch svelte-1yvib7k";
-  			add_location(label0, file, 202, 2, 6087);
-  			add_location(span1, file, 206, 2, 6217);
-  			add_location(span2, file, 207, 2, 6238);
+  			add_location(label0, file, 216, 2, 6451);
+  			add_location(span1, file, 220, 2, 6581);
+  			add_location(span2, file, 221, 2, 6602);
   			attr(input2, "type", "checkbox");
   			input2.className = "svelte-1yvib7k";
-  			add_location(input2, file, 209, 4, 6287);
+  			add_location(input2, file, 223, 4, 6651);
   			span3.className = "slider round svelte-1yvib7k";
-  			add_location(span3, file, 210, 4, 6347);
+  			add_location(span3, file, 224, 4, 6711);
   			label1.className = "switch svelte-1yvib7k";
-  			add_location(label1, file, 208, 2, 6260);
-  			add_location(span4, file, 212, 2, 6390);
-  			add_location(span5, file, 213, 2, 6412);
+  			add_location(label1, file, 222, 2, 6624);
+  			add_location(span4, file, 226, 2, 6754);
+  			add_location(span5, file, 227, 2, 6776);
   			attr(input3, "type", "checkbox");
   			input3.className = "svelte-1yvib7k";
-  			add_location(input3, file, 215, 4, 6461);
+  			add_location(input3, file, 229, 4, 6825);
   			span6.className = "slider round svelte-1yvib7k";
-  			add_location(span6, file, 216, 4, 6519);
+  			add_location(span6, file, 230, 4, 6883);
   			label2.className = "switch svelte-1yvib7k";
-  			add_location(label2, file, 214, 2, 6434);
-  			add_location(span7, file, 218, 2, 6562);
-  			add_location(span8, file, 219, 2, 6583);
+  			add_location(label2, file, 228, 2, 6798);
+  			add_location(span7, file, 232, 2, 6926);
+  			add_location(span8, file, 233, 2, 6947);
   			button1.className = "" + ctx.prev_button + " svelte-1yvib7k";
-  			add_location(button1, file, 222, 4, 6630);
+  			add_location(button1, file, 236, 4, 6994);
   			p.className = "" + ctx.is_pages + " svelte-1yvib7k";
-  			add_location(p, file, 225, 4, 6732);
+  			add_location(p, file, 239, 4, 7096);
   			button2.className = "" + ctx.next_button + " svelte-1yvib7k";
-  			add_location(button2, file, 226, 4, 6804);
+  			add_location(button2, file, 240, 4, 7168);
   			div1.className = "Pages svelte-1yvib7k";
-  			add_location(div1, file, 221, 2, 6606);
+  			add_location(div1, file, 235, 2, 6970);
   			div2.className = "m-2 text-maintxt";
-  			add_location(div2, file, 201, 0, 6054);
+  			add_location(div2, file, 215, 0, 6418);
   			img.src = "./assets/loading.svg";
   			img.alt = "Loading...";
-  			add_location(img, file, 233, 2, 6941);
+  			add_location(img, file, 247, 2, 7305);
   			div3.className = "" + ctx.loading + " svelte-1yvib7k";
-  			add_location(div3, file, 232, 0, 6917);
+  			add_location(div3, file, 246, 0, 7281);
   			div4.className = "" + ctx.results_css + " svelte-1yvib7k";
-  			add_location(div4, file, 237, 0, 7002);
-  			add_location(div5, file, 251, 0, 7501);
-  			set_style(div6, "padding-bottom", "80px");
-  			add_location(div6, file, 252, 0, 7522);
+  			add_location(div4, file, 250, 0, 7365);
+  			set_style(div5, "padding-bottom", "80px");
+  			add_location(div5, file, 286, 0, 8840);
 
   			dispose = [
   				listen(window, "keydown", ctx.handleEnter),
@@ -4538,9 +4657,6 @@
 
   			insert(target, t32, anchor);
   			insert(target, div5, anchor);
-  			append(div5, t33);
-  			insert(target, t34, anchor);
-  			insert(target, div6, anchor);
   			current = true;
   		},
 
@@ -4574,7 +4690,7 @@
   				div3.className = "" + ctx.loading + " svelte-1yvib7k";
   			}
 
-  			if (changed.results || changed.book_menu) {
+  			if (changed.results || changed.book_menu || changed.show_details || changed.details) {
   				each_value = ctx.results;
 
   				for (var i = 0; i < each_value.length; i += 1) {
@@ -4598,10 +4714,6 @@
 
   			if (!current || changed.results_css) {
   				div4.className = "" + ctx.results_css + " svelte-1yvib7k";
-  			}
-
-  			if (!current || changed.results) {
-  				set_data(t33, ctx.results);
   			}
   		},
 
@@ -4636,8 +4748,6 @@
   			if (detaching) {
   				detach(t32);
   				detach(div5);
-  				detach(t34);
-  				detach(div6);
   			}
 
   			run_all(dispose);
@@ -4662,6 +4772,9 @@
     let loading = "Hidden";
     let results_css = "Hidden";
     let book_menu = [];
+    let details = [];
+    let show_details = [];
+    let allbooks = [];
 
     function handleEnter(event) {
       // key = event.key;
@@ -4731,6 +4844,12 @@
     function handleNewSearch() {
       $$invalidate('page_number', page_number = 0);
       handleSearch();
+    }
+
+    function showDetails(index) {
+     show_details[index] = !show_details[index]; $$invalidate('show_details', show_details);
+     let details_link = dist_3(allbooks[index]).firstChild.firstChild.rawAttrs;
+     console.log(details_link);
     }
 
     function refineResult() {
@@ -4805,7 +4924,13 @@
         return elem.structuredText;
       });
       $$invalidate('book_menu', book_menu = array5.map(() => {
-        return null
+        return null;
+      }));
+      $$invalidate('show_details', show_details = array5.map(() => {
+        return null;
+      }));
+      $$invalidate('allbooks', allbooks = array5.map(elem => {
+        return elem;
       }));
       // console.log('array6 is', array6);
       // result = parse(array5)
@@ -4814,7 +4939,6 @@
       // this.setState({ result2: array6, pagesTotal: pagesTotal.length / 2 });
       // result2 = array6
       $$invalidate('pages_total', pages_total = pages_total.length / 2);
-      console.log(book_menu);
     }
     function showBookMenu(index) {
       book_menu[index] = !book_menu[index]; $$invalidate('book_menu', book_menu);
@@ -4852,6 +4976,18 @@
   		return showBookMenu(index);
   	}
 
+  	function click_handler_3({ index }) {
+  		return showDetails(index);
+  	}
+
+  	function click_handler_4({ index }) {
+  		return showDetails(index);
+  	}
+
+  	function click_handler_5({ index }) {
+  		return showDetails(index);
+  	}
+
   	return {
   		querie,
   		page_number,
@@ -4866,10 +5002,13 @@
   		loading,
   		results_css,
   		book_menu,
+  		details,
+  		show_details,
   		handleEnter,
   		changePageNumber,
   		handleSearch,
   		handleNewSearch,
+  		showDetails,
   		refineResult,
   		showBookMenu,
   		input0_input_handler,
@@ -4878,14 +5017,17 @@
   		input3_change_handler,
   		click_handler,
   		click_handler_1,
-  		click_handler_2
+  		click_handler_2,
+  		click_handler_3,
+  		click_handler_4,
+  		click_handler_5
   	};
   }
 
   class Search extends SvelteComponentDev {
   	constructor(options) {
   		super(options);
-  		init(this, options, instance, create_fragment, safe_not_equal, ["changePageNumber", "handleSearch", "handleNewSearch", "refineResult", "showBookMenu"]);
+  		init(this, options, instance, create_fragment, safe_not_equal, ["changePageNumber", "handleSearch", "handleNewSearch", "showDetails", "refineResult", "showBookMenu"]);
 
   		const { ctx } = this.$$;
   		const props = options.props || {};
@@ -4897,6 +5039,9 @@
   		}
   		if (ctx.handleNewSearch === undefined && !('handleNewSearch' in props)) {
   			console.warn("<Search> was created without expected prop 'handleNewSearch'");
+  		}
+  		if (ctx.showDetails === undefined && !('showDetails' in props)) {
+  			console.warn("<Search> was created without expected prop 'showDetails'");
   		}
   		if (ctx.refineResult === undefined && !('refineResult' in props)) {
   			console.warn("<Search> was created without expected prop 'refineResult'");
@@ -4927,6 +5072,14 @@
   	}
 
   	set handleNewSearch(value) {
+  		throw new Error("<Search>: Props cannot be set directly on the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
+  	}
+
+  	get showDetails() {
+  		return this.$$.ctx.showDetails;
+  	}
+
+  	set showDetails(value) {
   		throw new Error("<Search>: Props cannot be set directly on the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
   	}
 

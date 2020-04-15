@@ -2,7 +2,7 @@
   import axios from "axios";
   import { parse } from "node-html-parser";
   import { beforeUpdate, afterUpdate } from "svelte";
-  import { fly } from 'svelte/transition';
+  import { fly } from "svelte/transition";
 
   let querie = null;
   let page_number = 0;
@@ -17,7 +17,10 @@
   let is_pages = "Hidden";
   let loading = "Hidden";
   let results_css = "Hidden";
-  let book_menu = []
+  let book_menu = [];
+  let details = [];
+  let show_details = [];
+  let allbooks = []
 
   function handleEnter(event) {
     // key = event.key;
@@ -87,6 +90,12 @@
   export function handleNewSearch() {
     page_number = 0;
     handleSearch();
+  }
+
+  export function showDetails(index) {
+   show_details[index] = !show_details[index]
+   let details_link = parse(allbooks[index]).firstChild.firstChild.rawAttrs
+   console.log(details_link)
   }
 
   export function refineResult() {
@@ -161,8 +170,14 @@
       return elem.structuredText;
     });
     book_menu = array5.map(() => {
-      return null
-    })
+      return null;
+    });
+    show_details = array5.map(() => {
+      return null;
+    });
+    allbooks = array5.map(elem => {
+      return elem;
+    });
     // console.log('array6 is', array6);
     // result = parse(array5)
     results = array6;
@@ -170,10 +185,9 @@
     // this.setState({ result2: array6, pagesTotal: pagesTotal.length / 2 });
     // result2 = array6
     pages_total = pages_total.length / 2;
-    console.log(book_menu);
   }
   export function showBookMenu(index) {
-    book_menu[index] = !book_menu[index]
+    book_menu[index] = !book_menu[index];
   }
 </script>
 
@@ -307,20 +321,40 @@
   <img src="./assets/loading.svg" alt="Loading..." />
 </div>
 
-
 <div class={results_css}>
   {#each results as result, index}
-    {#if (result.includes('Найденные книги') || result.includes('Найденные писатели') || result.includes('Найденные серии'))}
+    {#if result.includes('Найденные книги') || result.includes('Найденные писатели') || result.includes('Найденные серии')}
       <h2 style="font-size: 1.5em">{result}</h2>
     {:else}
       <div on:click={() => showBookMenu(index)}>{result}</div>
       {#if book_menu[index]}
-      <div transition:fly="{{ y: -25, duration: 500 }}" style="color: green">
-      details add to library
-      </div>
+        <div transition:fly={{ y: -25, duration: 500 }} style="color: green; display: flex">
+          <button
+            class="focus:outline-none bg-mainbtn m-2 static rounded-lg py-2 px-4"
+            on:click={() => showDetails(index)}>
+            <img style="max-height: 1em" src="./assets/details.svg" alt="details">
+          </button>
+          <button
+          style="display: flex"
+            class="focus:outline-none bg-mainbtn m-2 static rounded-lg py-2 px-4"
+            on:click={() => showDetails(index)}>
+            <img style="max-height: 1em" src="./assets/library.svg" alt="library">
+            <img style="max-height: 1em" src="./assets/add.svg" alt="add to">
+          </button>
+          <button
+            class="focus:outline-none bg-mainbtn m-2 static rounded-lg py-2 px-4"
+            on:click={() => showDetails(index)}>
+            <img style="max-height: 1em" src="./assets/download.svg" alt="download">
+          </button>
+        </div>
+        {#if show_details[index]}
+        <div>
+          {details[index]}
+          details
+        </div>
+        {/if}
       {/if}
     {/if}
   {/each}
 </div>
-<div>{results}</div>
 <div style="padding-bottom: 80px;" />
