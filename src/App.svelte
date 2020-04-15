@@ -13,33 +13,17 @@
 </script>
 
 <style lang="postcss">
-  nav {
-    border-bottom: 1px solid rgba(255, 62, 0, 0.1);
-    font-weight: 300;
-    padding: 0 1em;
-    bottom: 0;
-    position: fixed;
-    background-color: #1e1e1e;
+  .navbar {
     width: 100%;
-    opacity: 1;
+    bottom: 0;
+    overflow: auto;
+    position: fixed;
   }
-
-   li {
-    display: block;
-    float: left;
-  }
-
-   ul {
-    margin: 0;
-    padding: 0;
-    opacity: 1;
-  }
-
-  /* clearfix */
-  ul::after {
-    content: "";
-    display: block;
-    clear: both;
+  img {
+    max-height: 1.5em;
+      display: block;
+  margin-left: auto;
+  margin-right: auto;
   }
 </style>
 
@@ -50,59 +34,34 @@
 </main>
 
 <Router {url}>
-  <nav>
-    <ul>
-      <li>
-        <Link to="/">
-          <img
-            style="max-height: 2.5em; margin-left: 5vw; padding-bottom: 8px; padding-top: 8px"
-            src="assets/search.svg"
-            alt="Search"
-            align="middle" />
-        </Link>
-      </li>
-
-      <li>
-        <Link to="library">
-          <img
-            style="max-height: 2.5em; margin-left: 32vw; padding-bottom: 8px; padding-top: 8px"
-            src="assets/library.svg"
-            alt="Search" />
-        </Link>
-      </li>
-
-      <li>
-        <Link to="settings">
-          <img
-            style="max-height: 2.5em; margin-left: 30vw; padding-bottom: 8px; padding-top: 8px"
-            src="assets/settings.svg"
-            alt="Search" />
-        </Link>
-      </li>
-    </ul>
-  </nav>
-
-  <!-- <nav style="display: flex">
-    <Link to="/">
-      <img
-        style="max-height: 2em; width: 30%;"
-        src="assets/search.svg"
-        alt="Search"
-        align="middle" />
+  <div class="navbar">
+    <Link
+      class="link"
+      style=" float: left; padding: 12px; color: white; text-decoration: none;
+      font-size: 17px; width: 25%; /* Four links of equal widths */ text-align:
+      center;"
+      to="/">
+      <img src="assets/search.svg" alt="Search" />
     </Link>
-    <Link to="library">
-      <img
-        style="max-height: 2em; width: 30%;"
-        src="assets/library.svg"
-        alt="Search" />
+    <Link
+      class="link"
+      style=" float: left; padding: 12px; color: white; text-decoration: none;
+      font-size: 17px; width: 25%; /* Four links of equal widths */ text-align:
+      center;"
+      to="library">
+      <img src="assets/library.svg" alt="library" />
     </Link>
-    <Link to="settings">
-      <img
-        style="max-height: 2em; width: 30%;"
-        src="assets/settings.svg"
-        alt="Search" />
+    <Link
+      class="link"
+      style=" float: left; padding: 12px; color: white; text-decoration: none;
+      font-size: 17px; width: 25%; /* Four links of equal widths */ text-align:
+      center;"
+      to="settings">
+      <img src="assets/settings.svg" alt="settings" />
     </Link>
-  </nav> -->
+
+  </div>
+
   <div>
     <!-- <Route path="blog/:id" component="{BlogPost}" /> -->
     <!-- <Route path="blog" component="{Blog}" /> -->
