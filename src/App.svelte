@@ -16,14 +16,14 @@
   .navbar {
     width: 100%;
     bottom: 0;
-    overflow: auto;
     position: fixed;
+    background-color: #1e1e1e;
   }
   img {
-    max-height: 1.5em;
-      display: block;
-  margin-left: auto;
-  margin-right: auto;
+    max-height: 1.2em;
+    display: block;
+    margin-left: auto;
+    margin-right: auto;
   }
 </style>
 
@@ -35,28 +35,13 @@
 
 <Router {url}>
   <div class="navbar">
-    <Link
-      class="link"
-      style=" float: left; padding: 12px; color: white; text-decoration: none;
-      font-size: 17px; width: 25%; /* Four links of equal widths */ text-align:
-      center;"
-      to="/">
+    <Link to="/">
       <img src="assets/search.svg" alt="Search" />
     </Link>
-    <Link
-      class="link"
-      style=" float: left; padding: 12px; color: white; text-decoration: none;
-      font-size: 17px; width: 25%; /* Four links of equal widths */ text-align:
-      center;"
-      to="library">
+    <Link to="library">
       <img src="assets/library.svg" alt="library" />
     </Link>
-    <Link
-      class="link"
-      style=" float: left; padding: 12px; color: white; text-decoration: none;
-      font-size: 17px; width: 25%; /* Four links of equal widths */ text-align:
-      center;"
-      to="settings">
+    <Link to="settings">
       <img src="assets/settings.svg" alt="settings" />
     </Link>
 

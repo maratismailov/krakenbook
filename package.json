@@ -14,7 +14,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/noprodev/svelte-starter-postcss.git"
+    "url": "git+https://github.com/regfe89/krakenbook.git"
   },
   "keywords": [
     "Svelte",
@@ -24,9 +24,9 @@
   "author": "noprodev",
   "license": "UNLICENSED",
   "bugs": {
-    "url": "https://github.com/noprodev/svelte-starter-postcss/issues"
+    "url": "https://github.com/regfe89/krakenbook/issues"
   },
-  "homepage": "https://github.com/noprodev/svelte-starter-postcss#readme",
+  "homepage": "https://krakenbook.netlify.com",
   "devDependencies": {
     "@fullhuman/postcss-purgecss": "^1.2.0",
     "chokidar": "^3.0.0",

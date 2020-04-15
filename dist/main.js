@@ -6262,7 +6262,7 @@
 
   const file$4 = "src/App.svelte";
 
-  // (25:4) <Link       class="link"       style=" float: left; padding: 12px; color: white; text-decoration: none;       font-size: 17px; width: 25%; /* Four links of equal widths */ text-align:       center;"       to="/">
+  // (25:4) <Link to="/">
   function create_default_slot_4(ctx) {
   	var img;
 
@@ -6271,8 +6271,8 @@
   			img = element("img");
   			img.src = "assets/search.svg";
   			img.alt = "Search";
-  			img.className = "svelte-vdm7ub";
-  			add_location(img, file$4, 30, 6, 949);
+  			img.className = "svelte-1u8z0s8";
+  			add_location(img, file$4, 25, 6, 761);
   		},
 
   		m: function mount(target, anchor) {
@@ -6287,7 +6287,7 @@
   	};
   }
 
-  // (33:4) <Link       class="link"       style=" float: left; padding: 12px; color: white; text-decoration: none;       font-size: 17px; width: 25%; /* Four links of equal widths */ text-align:       center;"       to="library">
+  // (28:4) <Link to="library">
   function create_default_slot_3(ctx) {
   	var img;
 
@@ -6296,8 +6296,8 @@
   			img = element("img");
   			img.src = "assets/library.svg";
   			img.alt = "library";
-  			img.className = "svelte-vdm7ub";
-  			add_location(img, file$4, 38, 6, 1235);
+  			img.className = "svelte-1u8z0s8";
+  			add_location(img, file$4, 28, 6, 848);
   		},
 
   		m: function mount(target, anchor) {
@@ -6312,7 +6312,7 @@
   	};
   }
 
-  // (41:4) <Link       class="link"       style=" float: left; padding: 12px; color: white; text-decoration: none;       font-size: 17px; width: 25%; /* Four links of equal widths */ text-align:       center;"       to="settings">
+  // (31:4) <Link to="settings">
   function create_default_slot_2(ctx) {
   	var img;
 
@@ -6321,8 +6321,8 @@
   			img = element("img");
   			img.src = "assets/settings.svg";
   			img.alt = "settings";
-  			img.className = "svelte-vdm7ub";
-  			add_location(img, file$4, 46, 6, 1524);
+  			img.className = "svelte-1u8z0s8";
+  			add_location(img, file$4, 31, 6, 938);
   		},
 
   		m: function mount(target, anchor) {
@@ -6337,7 +6337,7 @@
   	};
   }
 
-  // (57:4) <Route path="/">
+  // (42:4) <Route path="/">
   function create_default_slot_1(ctx) {
   	var current;
 
@@ -6377,8 +6377,6 @@
 
   	var link0 = new Link({
   		props: {
-  		class: "link",
-  		style: " float: left; padding: 12px; color: white; text-decoration: none;\n      font-size: 17px; width: 25%; /* Four links of equal widths */ text-align:\n      center;",
   		to: "/",
   		$$slots: { default: [create_default_slot_4] },
   		$$scope: { ctx }
@@ -6388,8 +6386,6 @@
 
   	var link1 = new Link({
   		props: {
-  		class: "link",
-  		style: " float: left; padding: 12px; color: white; text-decoration: none;\n      font-size: 17px; width: 25%; /* Four links of equal widths */ text-align:\n      center;",
   		to: "library",
   		$$slots: { default: [create_default_slot_3] },
   		$$scope: { ctx }
@@ -6399,8 +6395,6 @@
 
   	var link2 = new Link({
   		props: {
-  		class: "link",
-  		style: " float: left; padding: 12px; color: white; text-decoration: none;\n      font-size: 17px; width: 25%; /* Four links of equal widths */ text-align:\n      center;",
   		to: "settings",
   		$$slots: { default: [create_default_slot_2] },
   		$$scope: { ctx }
@@ -6448,9 +6442,9 @@
   			route1.$$.fragment.c();
   			t4 = space();
   			route2.$$.fragment.c();
-  			div0.className = "navbar svelte-vdm7ub";
-  			add_location(div0, file$4, 23, 2, 705);
-  			add_location(div1, file$4, 51, 2, 1598);
+  			div0.className = "navbar svelte-1u8z0s8";
+  			add_location(div0, file$4, 23, 2, 716);
+  			add_location(div1, file$4, 36, 2, 1012);
   		},
 
   		m: function mount(target, anchor) {
@@ -6566,7 +6560,7 @@
   			t = space();
   			router.$$.fragment.c();
   			main.className = "overflow-hidden ";
-  			add_location(main, file$4, 16, 0, 580);
+  			add_location(main, file$4, 16, 0, 591);
   		},
 
   		l: function claim(nodes) {
