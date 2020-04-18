@@ -1,8 +1,9 @@
 <script>
   import axios from "axios";
   import { parse } from "node-html-parser";
-  import { beforeUpdate, afterUpdate } from "svelte";
+  import { beforeUpdate, afterUpdate, onMount } from "svelte";
   import { fly } from "svelte/transition";
+  import Modal from "svelte-simple-modal";
 
   let querie = null;
   let page_number = 0;
@@ -16,11 +17,17 @@
   let next_button = "Hidden";
   let is_pages = "Hidden";
   let loading = "Hidden";
+  let loading_details = "Hidden";
   let results_css = "Hidden";
   let book_menu = [];
   let details = [];
+  let details_text = "";
   let show_details = [];
-  let allbooks = []
+  let allbooks = [];
+  let show_details_btn = null;
+  let show_details_img = null;
+  let show_download_options = null;
+  let download_links = [];
 
   function handleEnter(event) {
     // key = event.key;
@@ -32,6 +39,8 @@
   }
 
   beforeUpdate(() => {
+    show_details_btn = document.getElementById("show_details_btn");
+    show_details_img = document.getElementById("show_details_img");
     prev_button = "Hidden";
     if (page_number > 0) {
       prev_button =
@@ -92,10 +101,78 @@
     handleSearch();
   }
 
+  export function hideDetails(event) {
+    if (
+      event.target !== show_details_btn &&
+      event.target !== show_details_img
+    ) {
+      show_details = [];
+    }
+  }
+
   export function showDetails(index) {
-   show_details[index] = !show_details[index]
-   let details_link = parse(allbooks[index]).firstChild.firstChild.rawAttrs
-   console.log(details_link)
+    show_details[index] = !show_details[index];
+    let pre_details_link = parse(allbooks[index]).firstChild.firstChild
+      .rawAttrs;
+    pre_details_link = pre_details_link.substr(6);
+    let details_link = pre_details_link.slice(0, -1);
+    const details_querie =
+      "https://flibustasearch.herokuapp.com/" + details_link;
+    let details_body = "";
+    axios.get(details_querie).then(response => {
+      details_body = response.data;
+      refineDetails(details_body);
+    });
+  }
+
+  export function showDownloadOptions(index) {
+    show_download_options[index] = !show_download_options[index];
+    let download_link = parse(allbooks[index])
+      .firstChild.firstChild.rawAttrs.substr(6)
+      .slice(0, -1);
+    download_links[index] = {
+      fb2: download_link + "/fb2",
+      epub: download_link + "/epub",
+      mobi: download_link + "/mobi"
+    };
+  }
+
+  export function downloadBook(index, type) {
+    let download_link =
+      parse(allbooks[index])
+        .firstChild.firstChild.rawAttrs.substr(6)
+        .slice(0, -1) + type;
+    const link = document.createElement("a");
+    link.href = download_link;
+    link.click();
+
+    console.log(download_link);
+  }
+
+  export function refineDetails(details) {
+    loading_details = "Hidden";
+    const details0 = String(details);
+    const result1 = details0.substring(details0.indexOf('<h1 class="title">'));
+    const result2 = result1.substring(
+      0,
+      result1.indexOf("<hr/><div id='newann'")
+    );
+    // details_text = parse(result2).text
+
+    const url = "http://flibusta.is";
+    const result3 = result2.replace(/<a\b[^>]*>(.*?)<\/a>/g, "");
+    const result5 = result3.replace(
+      /<[a-zA-Z]+(\s+[a-zA-Z]+\s*=\s*("([^"]*)"|'([^']*)'))*\s*\/>/,
+      ""
+    );
+    const position = result5.indexOf('<img src="') + 10;
+    const result6 = [
+      result5.slice(0, position),
+      url,
+      result5.slice(position)
+    ].join("");
+    details_text = result6;
+    console.log(details_text);
   }
 
   export function refineResult() {
@@ -175,9 +252,16 @@
     show_details = array5.map(() => {
       return null;
     });
+    show_download_options = array5.map(() => {
+      return null;
+    });
+    details = array5.map(() => {
+      return null;
+    });
     allbooks = array5.map(elem => {
       return elem;
     });
+
     // console.log('array6 is', array6);
     // result = parse(array5)
     results = array6;
@@ -264,12 +348,32 @@
     height: 50%;
     margin: 1%;
   }
+
+  hr {
+    background-color: #375a7f;
+    height: 1px;
+  }
+
+  .outer_details_div {
+    margin-left: 2vw;
+    margin-right: 2vw;
+    width: 90vw;
+    height: 50vh;
+    z-index: 1;
+    position: absolute;
+    overflow: auto;
+    background-color: #0b3a32;
+  }
+
+  .div_for_button {
+    text-align: center;
+  }
 </style>
 
 <svelte:head>
   <title>kraken book</title>
 </svelte:head>
-<svelte:window on:keydown={handleEnter} />
+<svelte:window on:keydown={handleEnter} on:click={hideDetails} />
 
 <div class="">
   <input
@@ -325,35 +429,107 @@
   {#each results as result, index}
     {#if result.includes('Найденные книги') || result.includes('Найденные писатели') || result.includes('Найденные серии')}
       <h2 style="font-size: 1.5em">{result}</h2>
-    {:else}
+    {:else if result.length > 0}
       <div on:click={() => showBookMenu(index)}>{result}</div>
       {#if book_menu[index]}
-        <div transition:fly={{ y: -25, duration: 500 }} style="color: green; display: flex">
+        <div
+          transition:fly={{ y: -25, duration: 500 }}
+          style="color: green; display: flex">
           <button
+            id="show_details_btn"
             class="focus:outline-none bg-mainbtn m-2 static rounded-lg py-2 px-4"
             on:click={() => showDetails(index)}>
-            <img style="max-height: 1em" src="./assets/details.svg" alt="details">
+            <img
+              id="show_details_img"
+              style="max-height: 1em"
+              src="./assets/details.svg"
+              alt="details" />
           </button>
           <button
-          style="display: flex"
+            style="display: flex"
             class="focus:outline-none bg-mainbtn m-2 static rounded-lg py-2 px-4"
             on:click={() => showDetails(index)}>
-            <img style="max-height: 1em" src="./assets/library.svg" alt="library">
-            <img style="max-height: 1em" src="./assets/add.svg" alt="add to">
+            <img
+              style="max-height: 1em"
+              src="./assets/library.svg"
+              alt="library" />
           </button>
           <button
             class="focus:outline-none bg-mainbtn m-2 static rounded-lg py-2 px-4"
-            on:click={() => showDetails(index)}>
-            <img style="max-height: 1em" src="./assets/download.svg" alt="download">
+            on:click={() => showDownloadOptions(index)}>
+            <img
+              style="max-height: 1em"
+              src="./assets/download.svg"
+              alt="download" />
           </button>
+          {#if show_download_options[index]}
+            <!-- <button
+              class="text-maintxt focus:outline-none bg-mainbtn m-2 static
+              rounded-lg py-2 px-4"
+              on:click={() => downloadBook(index, '/fb2')}>
+              fb2
+            </button>
+            <button
+              class="text-maintxt focus:outline-none bg-mainbtn m-2 static
+              rounded-lg py-2 px-4"
+              on:click={() => downloadBook(index, '/epub')}>
+              epub
+            </button>
+            <button
+              type="button"
+              class="text-maintxt focus:outline-none bg-mainbtn m-2 static
+              rounded-lg py-2 px-4"
+              on:click={() => downloadBook(index, '/mobi')}>
+              mobi
+            </button>
+            <form action={download_links[index].mobi}>
+              <input type="submit" value="Go to Google" />
+            </form> -->
+            <a
+              class="text-maintxt focus:outline-none bg-mainbtn m-2 static
+              rounded-lg py-2 px-4"
+              href={download_links[index].fb2} download>
+              fb2
+            </a>
+            <a
+              class="text-maintxt focus:outline-none bg-mainbtn m-2 static
+              rounded-lg py-2 px-4"
+              href={download_links[index].epub} download>
+              epub
+            </a>
+            <a
+              class="text-maintxt focus:outline-none bg-mainbtn m-2 static
+              rounded-lg py-2 px-4"
+              href={download_links[index].mobi} download>
+              mobi
+            </a>
+          {/if}
         </div>
         {#if show_details[index]}
-        <div>
-          {details[index]}
-          details
-        </div>
+          <div class="outer_details_div">
+            <div class="div_for_button">
+              <button
+                class="focus:outline-none bg-mainbtn m-2 static rounded-lg py-2
+                px-4"
+                on:click={() => showDetails(index)}>
+                Закрыть
+              </button>
+            </div>
+            <div>
+              {@html details_text}
+            </div>
+            <div class="div_for_button">
+              <button
+                class="focus:outline-none bg-mainbtn m-2 static rounded-lg py-2
+                px-4"
+                on:click={() => showDetails(index)}>
+                Закрыть
+              </button>
+            </div>
+          </div>
         {/if}
       {/if}
+      <hr />
     {/if}
   {/each}
 </div>
