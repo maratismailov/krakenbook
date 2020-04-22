@@ -4217,9 +4217,9 @@
   			if (if_block) if_block.c();
   			t2 = space();
   			hr = element("hr");
-  			add_location(div, file$1, 367, 6, 11284);
+  			add_location(div, file$1, 367, 6, 11280);
   			attr_dev(hr, "class", "svelte-yq10dq");
-  			add_location(hr, file$1, 469, 6, 14896);
+  			add_location(hr, file$1, 469, 6, 14892);
   		},
   		m: function mount(target, anchor, remount) {
   			insert_dev(target, div, anchor);
@@ -4297,7 +4297,7 @@
   			h2 = element("h2");
   			t = text(t_value);
   			set_style(h2, "font-size", "1.5em");
-  			add_location(h2, file$1, 365, 6, 11202);
+  			add_location(h2, file$1, 365, 6, 11198);
   		},
   		m: function mount(target, anchor) {
   			insert_dev(target, h2, anchor);
@@ -4380,26 +4380,26 @@
   			set_style(img0, "max-height", "1em");
   			if (img0.src !== (img0_src_value = "./assets/details.svg")) attr_dev(img0, "src", img0_src_value);
   			attr_dev(img0, "alt", "details");
-  			add_location(img0, file$1, 376, 12, 11678);
+  			add_location(img0, file$1, 376, 12, 11674);
   			attr_dev(button0, "id", "show_details_btn");
   			attr_dev(button0, "class", "focus:outline-none bg-mainbtn m-2 static rounded-lg py-2 px-4");
-  			add_location(button0, file$1, 372, 10, 11493);
+  			add_location(button0, file$1, 372, 10, 11489);
   			set_style(img1, "max-height", "1em");
   			if (img1.src !== (img1_src_value = "./assets/library.svg")) attr_dev(img1, "src", img1_src_value);
   			attr_dev(img1, "alt", "library");
-  			add_location(img1, file$1, 386, 12, 12044);
+  			add_location(img1, file$1, 386, 12, 12040);
   			set_style(button1, "display", "flex");
   			attr_dev(button1, "class", "focus:outline-none bg-mainbtn m-2 static rounded-lg py-2 px-4");
-  			add_location(button1, file$1, 382, 10, 11859);
+  			add_location(button1, file$1, 382, 10, 11855);
   			set_style(img2, "max-height", "1em");
   			if (img2.src !== (img2_src_value = "./assets/download.svg")) attr_dev(img2, "src", img2_src_value);
   			attr_dev(img2, "alt", "download");
-  			add_location(img2, file$1, 394, 12, 12348);
+  			add_location(img2, file$1, 394, 12, 12344);
   			attr_dev(button2, "class", "focus:outline-none bg-mainbtn m-2 static rounded-lg py-2 px-4");
-  			add_location(button2, file$1, 391, 10, 12189);
+  			add_location(button2, file$1, 391, 10, 12185);
   			set_style(div, "color", "green");
   			set_style(div, "display", "flex");
-  			add_location(div, file$1, 369, 8, 11378);
+  			add_location(div, file$1, 369, 8, 11374);
   		},
   		m: function mount(target, anchor, remount) {
   			insert_dev(target, div, anchor);
@@ -4518,15 +4518,15 @@
   			attr_dev(a0, "class", "text-maintxt focus:outline-none bg-mainbtn m-2 static\n              rounded-lg py-2 px-4");
   			attr_dev(a0, "href", a0_href_value = /*download_links*/ ctx[23][/*index*/ ctx[49]].fb2);
   			attr_dev(a0, "download", "");
-  			add_location(a0, file$1, 422, 12, 13410);
+  			add_location(a0, file$1, 422, 12, 13406);
   			attr_dev(a1, "class", "text-maintxt focus:outline-none bg-mainbtn m-2 static\n              rounded-lg py-2 px-4");
   			attr_dev(a1, "href", a1_href_value = /*download_links*/ ctx[23][/*index*/ ctx[49]].epub);
   			attr_dev(a1, "download", "");
-  			add_location(a1, file$1, 429, 12, 13642);
+  			add_location(a1, file$1, 429, 12, 13638);
   			attr_dev(a2, "class", "text-maintxt focus:outline-none bg-mainbtn m-2 static\n              rounded-lg py-2 px-4");
   			attr_dev(a2, "href", a2_href_value = /*download_links*/ ctx[23][/*index*/ ctx[49]].mobi);
   			attr_dev(a2, "download", "");
-  			add_location(a2, file$1, 436, 12, 13876);
+  			add_location(a2, file$1, 436, 12, 13872);
   		},
   		m: function mount(target, anchor) {
   			insert_dev(target, a0, anchor);
@@ -4604,16 +4604,16 @@
   			button1 = element("button");
   			button1.textContent = "Закрыть";
   			attr_dev(button0, "class", "focus:outline-none bg-mainbtn m-2 static rounded-lg py-2\n                px-4");
-  			add_location(button0, file$1, 448, 14, 14260);
+  			add_location(button0, file$1, 448, 14, 14256);
   			attr_dev(div0, "class", "div_for_button svelte-yq10dq");
-  			add_location(div0, file$1, 447, 12, 14217);
-  			add_location(div1, file$1, 455, 12, 14502);
+  			add_location(div0, file$1, 447, 12, 14213);
+  			add_location(div1, file$1, 455, 12, 14498);
   			attr_dev(button1, "class", "focus:outline-none bg-mainbtn m-2 static rounded-lg py-2\n                px-4");
-  			add_location(button1, file$1, 459, 14, 14617);
+  			add_location(button1, file$1, 459, 14, 14613);
   			attr_dev(div2, "class", "div_for_button svelte-yq10dq");
-  			add_location(div2, file$1, 458, 12, 14574);
+  			add_location(div2, file$1, 458, 12, 14570);
   			attr_dev(div3, "class", "outer_details_div svelte-yq10dq");
-  			add_location(div3, file$1, 446, 10, 14173);
+  			add_location(div3, file$1, 446, 10, 14169);
   		},
   		m: function mount(target, anchor, remount) {
   			insert_dev(target, div3, anchor);
@@ -4906,61 +4906,61 @@
   			attr_dev(input0, "class", "bg-white focus:outline-none border border-gray-300 rounded-lg py-2\n    px-4 w-9 static m-2");
   			attr_dev(input0, "type", "search");
   			attr_dev(input0, "placeholder", "Enter book name");
-  			add_location(input0, file$1, 304, 2, 9450);
+  			add_location(input0, file$1, 304, 2, 9446);
   			attr_dev(button0, "class", "focus:outline-none bg-mainbtn m-2 static rounded-lg py-2 px-4");
-  			add_location(button0, file$1, 311, 2, 9663);
+  			add_location(button0, file$1, 311, 2, 9659);
   			attr_dev(button1, "class", "focus:outline-none bg-mainbtn m-2 static rounded-lg py-2 px-4");
-  			add_location(button1, file$1, 316, 2, 9802);
+  			add_location(button1, file$1, 316, 2, 9798);
   			attr_dev(a, "href", "http://static.flibusta.is:443/b.fb2/Sever_Stalin-protiv-vyrodkov-Arbata-.M0SIqg.236755.fb2.zip");
-  			add_location(a, file$1, 321, 2, 9931);
+  			add_location(a, file$1, 321, 2, 9927);
   			attr_dev(div0, "class", "");
-  			add_location(div0, file$1, 303, 0, 9433);
+  			add_location(div0, file$1, 303, 0, 9429);
   			attr_dev(input1, "type", "checkbox");
   			attr_dev(input1, "class", "svelte-yq10dq");
-  			add_location(input1, file$1, 329, 4, 10124);
+  			add_location(input1, file$1, 329, 4, 10120);
   			attr_dev(span0, "class", "slider round svelte-yq10dq");
-  			add_location(span0, file$1, 330, 4, 10184);
+  			add_location(span0, file$1, 330, 4, 10180);
   			attr_dev(label0, "class", "switch svelte-yq10dq");
-  			add_location(label0, file$1, 328, 2, 10097);
-  			add_location(span1, file$1, 332, 2, 10227);
-  			add_location(span2, file$1, 333, 2, 10248);
+  			add_location(label0, file$1, 328, 2, 10093);
+  			add_location(span1, file$1, 332, 2, 10223);
+  			add_location(span2, file$1, 333, 2, 10244);
   			attr_dev(input2, "type", "checkbox");
   			attr_dev(input2, "class", "svelte-yq10dq");
-  			add_location(input2, file$1, 335, 4, 10297);
+  			add_location(input2, file$1, 335, 4, 10293);
   			attr_dev(span3, "class", "slider round svelte-yq10dq");
-  			add_location(span3, file$1, 336, 4, 10357);
+  			add_location(span3, file$1, 336, 4, 10353);
   			attr_dev(label1, "class", "switch svelte-yq10dq");
-  			add_location(label1, file$1, 334, 2, 10270);
-  			add_location(span4, file$1, 338, 2, 10400);
-  			add_location(span5, file$1, 339, 2, 10422);
+  			add_location(label1, file$1, 334, 2, 10266);
+  			add_location(span4, file$1, 338, 2, 10396);
+  			add_location(span5, file$1, 339, 2, 10418);
   			attr_dev(input3, "type", "checkbox");
   			attr_dev(input3, "class", "svelte-yq10dq");
-  			add_location(input3, file$1, 341, 4, 10471);
+  			add_location(input3, file$1, 341, 4, 10467);
   			attr_dev(span6, "class", "slider round svelte-yq10dq");
-  			add_location(span6, file$1, 342, 4, 10529);
+  			add_location(span6, file$1, 342, 4, 10525);
   			attr_dev(label2, "class", "switch svelte-yq10dq");
-  			add_location(label2, file$1, 340, 2, 10444);
-  			add_location(span7, file$1, 344, 2, 10572);
-  			add_location(span8, file$1, 345, 2, 10593);
+  			add_location(label2, file$1, 340, 2, 10440);
+  			add_location(span7, file$1, 344, 2, 10568);
+  			add_location(span8, file$1, 345, 2, 10589);
   			attr_dev(button2, "class", button2_class_value = "" + (null_to_empty(/*prev_button*/ ctx[14]) + " svelte-yq10dq"));
-  			add_location(button2, file$1, 348, 4, 10640);
+  			add_location(button2, file$1, 348, 4, 10636);
   			attr_dev(p, "class", p_class_value = "" + (null_to_empty(/*is_pages*/ ctx[16]) + " svelte-yq10dq"));
-  			add_location(p, file$1, 351, 4, 10742);
+  			add_location(p, file$1, 351, 4, 10738);
   			attr_dev(button3, "class", button3_class_value = "" + (null_to_empty(/*next_button*/ ctx[15]) + " svelte-yq10dq"));
-  			add_location(button3, file$1, 352, 4, 10814);
+  			add_location(button3, file$1, 352, 4, 10810);
   			attr_dev(div1, "class", "Pages svelte-yq10dq");
-  			add_location(div1, file$1, 347, 2, 10616);
+  			add_location(div1, file$1, 347, 2, 10612);
   			attr_dev(div2, "class", "m-2 text-maintxt");
-  			add_location(div2, file$1, 327, 0, 10064);
+  			add_location(div2, file$1, 327, 0, 10060);
   			if (img.src !== (img_src_value = "./assets/loading.svg")) attr_dev(img, "src", img_src_value);
   			attr_dev(img, "alt", "Loading...");
-  			add_location(img, file$1, 359, 2, 10951);
+  			add_location(img, file$1, 359, 2, 10947);
   			attr_dev(div3, "class", div3_class_value = "" + (null_to_empty(/*loading*/ ctx[17]) + " svelte-yq10dq"));
-  			add_location(div3, file$1, 358, 0, 10927);
+  			add_location(div3, file$1, 358, 0, 10923);
   			attr_dev(div4, "class", div4_class_value = "" + (null_to_empty(/*results_css*/ ctx[18]) + " svelte-yq10dq"));
-  			add_location(div4, file$1, 362, 0, 11011);
+  			add_location(div4, file$1, 362, 0, 11007);
   			set_style(div5, "padding-bottom", "80px");
-  			add_location(div5, file$1, 473, 0, 14930);
+  			add_location(div5, file$1, 473, 0, 14926);
   		},
   		l: function claim(nodes) {
   			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
@@ -5165,7 +5165,7 @@
   	// "http://flibusta.is/b/236755/fb2"
   	// "http://static.flibusta.is:443/b.fb2/Sever_Stalin-protiv-vyrodkov-Arbata-.M0SIqg.236755.fb2.zip"
   	// window.Blob("http://flibusta.is/b/236755/fb2");
-  	axios$1.get("http://flibusta.is/b/236755/fb2", {
+  	fetch("http://flibusta.is/b/236755/fb2", {
   		mode: "no-cors",
   		headers: { "Content-Type": "application/zip" }
   	}).then(response => console.log(response)).catch(err => console.log(err));

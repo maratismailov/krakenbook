@@ -72,7 +72,7 @@
     // "http://flibusta.is/b/236755/fb2"
     // "http://static.flibusta.is:443/b.fb2/Sever_Stalin-protiv-vyrodkov-Arbata-.M0SIqg.236755.fb2.zip"
     // window.Blob("http://flibusta.is/b/236755/fb2");
-    axios.get("http://flibusta.is/b/236755/fb2", {
+    fetch("http://flibusta.is/b/236755/fb2", {
       mode: 'no-cors',
        headers: {
       'Content-Type': 'application/zip'
