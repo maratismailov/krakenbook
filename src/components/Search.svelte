@@ -3,7 +3,8 @@
   import { parse } from "node-html-parser";
   import { beforeUpdate, afterUpdate, onMount } from "svelte";
   import { fly } from "svelte/transition";
-  import Modal from "svelte-simple-modal";
+  import { saveAs } from "file-saver";
+  // import { download } from "downloadjs"
 
   let querie = null;
   let page_number = 0;
@@ -65,6 +66,23 @@
   export function changePageNumber(arg) {
     page_number += arg;
     handleSearch();
+  }
+
+  export function getBlob() {
+    // "http://flibusta.is/b/236755/fb2"
+    // "http://static.flibusta.is:443/b.fb2/Sever_Stalin-protiv-vyrodkov-Arbata-.M0SIqg.236755.fb2.zip"
+    // window.Blob("http://flibusta.is/b/236755/fb2");
+    axios.get("http://flibusta.is/b/236755/fb2", {
+      mode: 'no-cors',
+       headers: {
+      'Content-Type': 'application/zip'
+    }
+    }).then(response => console.log(response))
+    .catch(err => console.log(err))
+  }
+
+  export function getBlob2() {
+    // download("data:http://flibusta.is/b/236755/fb2", "book.fb2.zip", "application/zip")
   }
 
   export function handleSearch() {
@@ -388,6 +406,15 @@
     on:click={handleNewSearch}>
     Search
   </button>
+  <button
+    class="focus:outline-none bg-mainbtn m-2 static rounded-lg py-2 px-4"
+    on:click={getBlob}>
+    blob
+  </button>
+  <a
+    href="http://static.flibusta.is:443/b.fb2/Sever_Stalin-protiv-vyrodkov-Arbata-.M0SIqg.236755.fb2.zip">
+    zip
+  </a>
 </div>
 
 <div class="m-2 text-maintxt">
@@ -488,19 +515,22 @@
             <a
               class="text-maintxt focus:outline-none bg-mainbtn m-2 static
               rounded-lg py-2 px-4"
-              href={download_links[index].fb2} download>
+              href={download_links[index].fb2}
+              download>
               fb2
             </a>
             <a
               class="text-maintxt focus:outline-none bg-mainbtn m-2 static
               rounded-lg py-2 px-4"
-              href={download_links[index].epub} download>
+              href={download_links[index].epub}
+              download>
               epub
             </a>
             <a
               class="text-maintxt focus:outline-none bg-mainbtn m-2 static
               rounded-lg py-2 px-4"
-              href={download_links[index].mobi} download>
+              href={download_links[index].mobi}
+              download>
               mobi
             </a>
           {/if}

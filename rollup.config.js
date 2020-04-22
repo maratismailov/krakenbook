@@ -35,7 +35,7 @@ export default {
     // resolve(),
     rollupNodeResolve({ jsnext: true, preferBuiltins: true, browser: true }),
     rollupJson(),
-    commonjs(),
+    commonjs({ namedExports: { 'file-saver': ['saveAs'] , 'downloadjs': ['download'] } }),
     globals(),
     builtins(),
     copy({
