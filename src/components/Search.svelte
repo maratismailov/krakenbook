@@ -1,9 +1,11 @@
 <script>
   import axios from "axios";
+  import { flip } from "svelte/animate";
   import { parse } from "node-html-parser";
   import { beforeUpdate, afterUpdate, onMount } from "svelte";
   import { fly } from "svelte/transition";
   import { saveAs } from "file-saver";
+  import FileDownload from "js-file-download";
   // import { download } from "downloadjs"
 
   let querie = null;
@@ -19,11 +21,14 @@
   let is_pages = "Hidden";
   let loading = "Hidden";
   let loading_details = "Hidden";
+  let loading_to_library = [];
+  let book_added = [];
   let results_css = "Hidden";
   let book_menu = [];
   let details = [];
   let details_text = "";
   let show_details = [];
+  let show_details_bak = [];
   let allbooks = [];
   let show_details_btn = null;
   let show_details_img = null;
@@ -68,21 +73,83 @@
     handleSearch();
   }
 
-  export function getBlob() {
-    // "http://flibusta.is/b/236755/fb2"
-    // "http://static.flibusta.is:443/b.fb2/Sever_Stalin-protiv-vyrodkov-Arbata-.M0SIqg.236755.fb2.zip"
-    // window.Blob("http://flibusta.is/b/236755/fb2");
-    fetch("http://flibusta.is/b/236755/fb2", {
-      mode: 'no-cors',
-       headers: {
-      'Content-Type': 'application/zip'
-    }
-    }).then(response => console.log(response))
-    .catch(err => console.log(err))
+  export function getBlob(book_url, book_name, index) {
+    loading_to_library[index] = true;
+    axios({
+      url: "https://krakenflask.herokuapp.com/download/" + book_url, //your url
+      method: "GET",
+      responseType: "blob" // important
+    }).then(response => {
+      const book = response.data;
+      addBookToDB(book, book_name, index);
+    });
   }
 
-  export function getBlob2() {
-    // download("data:http://flibusta.is/b/236755/fb2", "book.fb2.zip", "application/zip")
+  export function addBookToDB(book, book_name, index) {
+    var db;
+    //check for support
+    if (!("indexedDB" in window)) {
+      console.log("This browser doesn't support IndexedDB");
+      return;
+    }
+    // var idb = window.indexedDB
+    var db_books = indexedDB.open("books_db", 1);
+    db_books.onupgradeneeded = function(e) {
+      var db = e.target.result;
+      if (!db.objectStoreNames.contains("books_store")) {
+        var books_store = db.createObjectStore("books_store", {
+          autoIncrement: true
+        });
+      }
+      if (!db.objectStoreNames.contains("book_names")) {
+        var books_store = db.createObjectStore("book_names", {
+          autoIncrement: true
+        });
+      }
+    };
+
+    db_books.onsuccess = function(e) {
+      db = e.target.result;
+      addBook();
+      addBookTitle();
+    };
+    db_books.onerror = function(e) {
+      console.log("onerror!");
+      console.dir(e);
+    };
+
+    function addBook() {
+      var transaction = db.transaction(["books_store"], "readwrite");
+      var store = transaction.objectStore("books_store");
+
+      var request = store.add(book);
+
+      request.onerror = function(e) {
+        console.log("Error", e.target.error.name);
+      };
+      request.onsuccess = function(e) {
+      };
+    }
+
+    function addBookTitle() {
+      var transaction = db.transaction(["book_names"], "readwrite");
+      var store = transaction.objectStore("book_names");
+
+      var request = store.add(book_name);
+
+      request.onerror = function(e) {
+        console.log("Error", e.target.error.name);
+      };
+      request.onsuccess = function(e) {
+        loading_to_library[index] = false;
+        book_added[index] = true;
+        setTimeout(() => hideAdded(index), 2000);
+      };
+    }
+  }
+
+  export function hideAdded(index) {
+    book_added[index] = false;
   }
 
   export function handleSearch() {
@@ -120,15 +187,12 @@
   }
 
   export function hideDetails(event) {
-    if (
-      event.target !== show_details_btn &&
-      event.target !== show_details_img
-    ) {
-      show_details = [];
-    }
+    show_details = show_details_bak;
   }
 
   export function showDetails(index) {
+    details_text = "";
+    loading_details = null;
     show_details[index] = !show_details[index];
     let pre_details_link = parse(allbooks[index]).firstChild.firstChild
       .rawAttrs;
@@ -163,8 +227,6 @@
     const link = document.createElement("a");
     link.href = download_link;
     link.click();
-
-    console.log(download_link);
   }
 
   export function refineDetails(details) {
@@ -190,7 +252,6 @@
       result5.slice(position)
     ].join("");
     details_text = result6;
-    console.log(details_text);
   }
 
   export function refineResult() {
@@ -238,7 +299,6 @@
     const array5 = array3.map((elem, index) => {
       if (elem.includes("<ul>")) {
         elem = elem.substr(elem.indexOf("<ul>") + 4);
-        // console.log('found!')
       }
       elem = elem.replace(/<span style="background-color: #FFFCBB">/g, "");
       elem = elem.replace(/<\/span>/g, "");
@@ -267,7 +327,16 @@
     book_menu = array5.map(() => {
       return null;
     });
+    loading_to_library = array5.map(() => {
+      return null;
+    });
+    book_added = array5.map(() => {
+      return null;
+    });
     show_details = array5.map(() => {
+      return null;
+    });
+    show_details_bak = array5.map(() => {
       return null;
     });
     show_download_options = array5.map(() => {
@@ -280,7 +349,6 @@
       return elem;
     });
 
-    // console.log('array6 is', array6);
     // result = parse(array5)
     results = array6;
     results_css = "text-maintxt m-2";
@@ -290,6 +358,14 @@
   }
   export function showBookMenu(index) {
     book_menu[index] = !book_menu[index];
+    let download_link = parse(allbooks[index])
+      .firstChild.firstChild.rawAttrs.substr(6)
+      .slice(0, -1);
+    download_links[index] = {
+      fb2: download_link + "/fb2",
+      epub: download_link + "/epub",
+      mobi: download_link + "/mobi"
+    };
   }
 </script>
 
@@ -391,7 +467,7 @@
 <svelte:head>
   <title>kraken book</title>
 </svelte:head>
-<svelte:window on:keydown={handleEnter} on:click={hideDetails} />
+<svelte:window on:keydown={handleEnter} />
 
 <div class="">
   <input
@@ -406,15 +482,6 @@
     on:click={handleNewSearch}>
     Search
   </button>
-  <button
-    class="focus:outline-none bg-mainbtn m-2 static rounded-lg py-2 px-4"
-    on:click={getBlob}>
-    blob
-  </button>
-  <a
-    href="http://static.flibusta.is:443/b.fb2/Sever_Stalin-protiv-vyrodkov-Arbata-.M0SIqg.236755.fb2.zip">
-    zip
-  </a>
 </div>
 
 <div class="m-2 text-maintxt">
@@ -449,48 +516,62 @@
 
 </div>
 <div class={loading}>
-  <img src="./assets/loading.svg" alt="Loading..." />
+  <img style="margin: auto" src="./assets/loading.svg" alt="Loading..." />
 </div>
 
 <div class={results_css}>
-  {#each results as result, index}
-    {#if result.includes('Найденные книги') || result.includes('Найденные писатели') || result.includes('Найденные серии')}
-      <h2 style="font-size: 1.5em">{result}</h2>
-    {:else if result.length > 0}
-      <div on:click={() => showBookMenu(index)}>{result}</div>
-      {#if book_menu[index]}
-        <div
-          transition:fly={{ y: -25, duration: 500 }}
-          style="color: green; display: flex">
-          <button
-            id="show_details_btn"
-            class="focus:outline-none bg-mainbtn m-2 static rounded-lg py-2 px-4"
-            on:click={() => showDetails(index)}>
-            <img
-              id="show_details_img"
-              style="max-height: 1em"
-              src="./assets/details.svg"
-              alt="details" />
-          </button>
-          <button
-            style="display: flex"
-            class="focus:outline-none bg-mainbtn m-2 static rounded-lg py-2 px-4"
-            on:click={() => showDetails(index)}>
-            <img
-              style="max-height: 1em"
-              src="./assets/library.svg"
-              alt="library" />
-          </button>
-          <button
-            class="focus:outline-none bg-mainbtn m-2 static rounded-lg py-2 px-4"
-            on:click={() => showDownloadOptions(index)}>
-            <img
-              style="max-height: 1em"
-              src="./assets/download.svg"
-              alt="download" />
-          </button>
-          {#if show_download_options[index]}
-            <!-- <button
+  {#each results as result, index (index)}
+    <div animate:flip>
+      {#if result.includes('Найденные книги') || result.includes('Найденные писатели') || result.includes('Найденные серии')}
+        <h2 style="font-size: 1.5em">{result}</h2>
+      {:else if result.length > 0}
+        <div on:click={() => showBookMenu(index)}>{result}</div>
+        {#if book_menu[index]}
+          <div style="color: green; display: flex">
+            <button
+              id="show_details_btn"
+              class="focus:outline-none bg-mainbtn m-2 static rounded-lg py-2
+              px-4"
+              on:click={() => showDetails(index)}>
+              <img
+                id="show_details_img"
+                style="max-height: 1em"
+                src="./assets/details.svg"
+                alt="details" />
+            </button>
+            <button
+              style="display: flex"
+              class="focus:outline-none bg-mainbtn m-2 static rounded-lg py-2
+              px-4"
+              on:click={() => getBlob(download_links[index].fb2, result, index)}>
+              <img
+                style="max-height: 1em"
+                src="./assets/library.svg"
+                alt="library" />
+            </button>
+            {#if loading_to_library[index]}
+              <span>
+                <img
+                  style="height: 2em"
+                  class="m-2 static"
+                  src="./assets/loading.svg"
+                  alt="Loading..." />
+              </span>
+            {/if}
+            {#if book_added[index]}
+              <span class="m-2 text-maintxt">Книга добавлена в библиотеку</span>
+            {/if}
+            <button
+              class="focus:outline-none bg-mainbtn m-2 static rounded-lg py-2
+              px-4"
+              on:click={() => showDownloadOptions(index)}>
+              <img
+                style="max-height: 1em"
+                src="./assets/download.svg"
+                alt="download" />
+            </button>
+            {#if show_download_options[index]}
+              <!-- <button
               class="text-maintxt focus:outline-none bg-mainbtn m-2 static
               rounded-lg py-2 px-4"
               on:click={() => downloadBook(index, '/fb2')}>
@@ -512,55 +593,62 @@
             <form action={download_links[index].mobi}>
               <input type="submit" value="Go to Google" />
             </form> -->
-            <a
-              class="text-maintxt focus:outline-none bg-mainbtn m-2 static
-              rounded-lg py-2 px-4"
-              href={download_links[index].fb2}
-              download>
-              fb2
-            </a>
-            <a
-              class="text-maintxt focus:outline-none bg-mainbtn m-2 static
-              rounded-lg py-2 px-4"
-              href={download_links[index].epub}
-              download>
-              epub
-            </a>
-            <a
-              class="text-maintxt focus:outline-none bg-mainbtn m-2 static
-              rounded-lg py-2 px-4"
-              href={download_links[index].mobi}
-              download>
-              mobi
-            </a>
-          {/if}
-        </div>
-        {#if show_details[index]}
-          <div class="outer_details_div">
-            <div class="div_for_button">
-              <button
-                class="focus:outline-none bg-mainbtn m-2 static rounded-lg py-2
-                px-4"
-                on:click={() => showDetails(index)}>
-                Закрыть
-              </button>
-            </div>
-            <div>
-              {@html details_text}
-            </div>
-            <div class="div_for_button">
-              <button
-                class="focus:outline-none bg-mainbtn m-2 static rounded-lg py-2
-                px-4"
-                on:click={() => showDetails(index)}>
-                Закрыть
-              </button>
-            </div>
+              <a
+                class="text-maintxt focus:outline-none bg-mainbtn m-2 static
+                rounded-lg py-2 px-4"
+                href={download_links[index].fb2}
+                download>
+                fb2
+              </a>
+              <a
+                class="text-maintxt focus:outline-none bg-mainbtn m-2 static
+                rounded-lg py-2 px-4"
+                href={download_links[index].epub}
+                download>
+                epub
+              </a>
+              <a
+                class="text-maintxt focus:outline-none bg-mainbtn m-2 static
+                rounded-lg py-2 px-4"
+                href={download_links[index].mobi}
+                download>
+                mobi
+              </a>
+            {/if}
           </div>
+          {#if show_details[index]}
+            <div class="outer_details_div">
+              <div class="div_for_button">
+                <button
+                  class="focus:outline-none bg-mainbtn m-2 static rounded-lg
+                  py-2 px-4"
+                  on:click={() => showDetails(index)}>
+                  Закрыть
+                </button>
+              </div>
+              <div class={loading_details}>
+                <img
+                  style="margin: auto"
+                  src="./assets/loading.svg"
+                  alt="Loading..." />
+              </div>
+              <div>
+                {@html details_text}
+              </div>
+              <div class="div_for_button">
+                <button
+                  class="focus:outline-none bg-mainbtn m-2 static rounded-lg
+                  py-2 px-4"
+                  on:click={() => showDetails(index)}>
+                  Закрыть
+                </button>
+              </div>
+            </div>
+          {/if}
         {/if}
+        <hr />
       {/if}
-      <hr />
-    {/if}
+    </div>
   {/each}
 </div>
 <div style="padding-bottom: 80px;" />

@@ -50,9 +50,13 @@
   <div>
     <!-- <Route path="blog/:id" component="{BlogPost}" /> -->
     <!-- <Route path="blog" component="{Blog}" /> -->
-    <Route path="library" component={Library} />
-    <Route path="settings" component={Settings} />
-    <Route path="/">
+    <Route exact path="library">
+      <Library />
+    </Route>
+    <Route exact path="settings">
+      <Settings />
+    </Route>
+    <Route exact path="/">
       <Search />
     </Route>
   </div>

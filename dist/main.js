@@ -254,6 +254,75 @@
       });
   }
 
+  function create_animation(node, from, fn, params) {
+      if (!from)
+          return noop;
+      const to = node.getBoundingClientRect();
+      if (from.left === to.left && from.right === to.right && from.top === to.top && from.bottom === to.bottom)
+          return noop;
+      const { delay = 0, duration = 300, easing = identity, 
+      // @ts-ignore todo: should this be separated from destructuring? Or start/end added to public api and documentation?
+      start: start_time = now() + delay, 
+      // @ts-ignore todo:
+      end = start_time + duration, tick = noop, css } = fn(node, { from, to }, params);
+      let running = true;
+      let started = false;
+      let name;
+      function start() {
+          if (css) {
+              name = create_rule(node, 0, 1, duration, delay, easing, css);
+          }
+          if (!delay) {
+              started = true;
+          }
+      }
+      function stop() {
+          if (css)
+              delete_rule(node, name);
+          running = false;
+      }
+      loop(now => {
+          if (!started && now >= start_time) {
+              started = true;
+          }
+          if (started && now >= end) {
+              tick(1, 0);
+              stop();
+          }
+          if (!running) {
+              return false;
+          }
+          if (started) {
+              const p = now - start_time;
+              const t = 0 + 1 * easing(p / duration);
+              tick(t, 1 - t);
+          }
+          return true;
+      });
+      start();
+      tick(0, 1);
+      return stop;
+  }
+  function fix_position(node) {
+      const style = getComputedStyle(node);
+      if (style.position !== 'absolute' && style.position !== 'fixed') {
+          const { width, height } = style;
+          const a = node.getBoundingClientRect();
+          node.style.position = 'absolute';
+          node.style.width = width;
+          node.style.height = height;
+          add_transform(node, a);
+      }
+  }
+  function add_transform(node, a) {
+      const b = node.getBoundingClientRect();
+      if (a.left !== b.left || a.top !== b.top) {
+          const style = getComputedStyle(node);
+          const transform = style.transform === 'none' ? '' : style.transform;
+          node.style.transform = `${transform} translate(${a.left - b.left}px, ${a.top - b.top}px)`;
+      }
+  }
+
   let current_component;
   function set_current_component(component) {
       current_component = component;
@@ -358,20 +427,6 @@
           $$.after_update.forEach(add_render_callback);
       }
   }
-
-  let promise;
-  function wait() {
-      if (!promise) {
-          promise = Promise.resolve();
-          promise.then(() => {
-              promise = null;
-          });
-      }
-      return promise;
-  }
-  function dispatch(node, direction, kind) {
-      node.dispatchEvent(custom_event(`${direction ? 'intro' : 'outro'}${kind}`));
-  }
   const outroing = new Set();
   let outros;
   function group_outros() {
@@ -409,114 +464,102 @@
           block.o(local);
       }
   }
-  const null_transition = { duration: 0 };
-  function create_bidirectional_transition(node, fn, params, intro) {
-      let config = fn(node, params);
-      let t = intro ? 0 : 1;
-      let running_program = null;
-      let pending_program = null;
-      let animation_name = null;
-      function clear_animation() {
-          if (animation_name)
-              delete_rule(node, animation_name);
-      }
-      function init(program, duration) {
-          const d = program.b - t;
-          duration *= Math.abs(d);
-          return {
-              a: t,
-              b: program.b,
-              d,
-              duration,
-              start: program.start,
-              end: program.start + duration,
-              group: program.group
-          };
-      }
-      function go(b) {
-          const { delay = 0, duration = 300, easing = identity, tick = noop, css } = config || null_transition;
-          const program = {
-              start: now() + delay,
-              b
-          };
-          if (!b) {
-              // @ts-ignore todo: improve typings
-              program.group = outros;
-              outros.r += 1;
-          }
-          if (running_program) {
-              pending_program = program;
-          }
-          else {
-              // if this is an intro, and there's a delay, we need to do
-              // an initial tick and/or apply CSS animation immediately
-              if (css) {
-                  clear_animation();
-                  animation_name = create_rule(node, t, b, duration, delay, easing, css);
-              }
-              if (b)
-                  tick(0, 1);
-              running_program = init(program, duration);
-              add_render_callback(() => dispatch(node, b, 'start'));
-              loop(now => {
-                  if (pending_program && now > pending_program.start) {
-                      running_program = init(pending_program, duration);
-                      pending_program = null;
-                      dispatch(node, running_program.b, 'start');
-                      if (css) {
-                          clear_animation();
-                          animation_name = create_rule(node, t, running_program.b, running_program.duration, 0, easing, config.css);
-                      }
-                  }
-                  if (running_program) {
-                      if (now >= running_program.end) {
-                          tick(t = running_program.b, 1 - t);
-                          dispatch(node, running_program.b, 'end');
-                          if (!pending_program) {
-                              // we're done
-                              if (running_program.b) {
-                                  // intro — we can tidy up immediately
-                                  clear_animation();
-                              }
-                              else {
-                                  // outro — needs to be coordinated
-                                  if (!--running_program.group.r)
-                                      run_all(running_program.group.c);
-                              }
-                          }
-                          running_program = null;
-                      }
-                      else if (now >= running_program.start) {
-                          const p = now - running_program.start;
-                          t = running_program.a + running_program.d * easing(p / running_program.duration);
-                          tick(t, 1 - t);
-                      }
-                  }
-                  return !!(running_program || pending_program);
-              });
-          }
-      }
-      return {
-          run(b) {
-              if (is_function(config)) {
-                  wait().then(() => {
-                      // @ts-ignore
-                      config = config();
-                      go(b);
-                  });
-              }
-              else {
-                  go(b);
-              }
-          },
-          end() {
-              clear_animation();
-              running_program = pending_program = null;
-          }
-      };
-  }
 
   const globals = (typeof window !== 'undefined' ? window : global);
+
+  function destroy_block(block, lookup) {
+      block.d(1);
+      lookup.delete(block.key);
+  }
+  function fix_and_destroy_block(block, lookup) {
+      block.f();
+      destroy_block(block, lookup);
+  }
+  function update_keyed_each(old_blocks, dirty, get_key, dynamic, ctx, list, lookup, node, destroy, create_each_block, next, get_context) {
+      let o = old_blocks.length;
+      let n = list.length;
+      let i = o;
+      const old_indexes = {};
+      while (i--)
+          old_indexes[old_blocks[i].key] = i;
+      const new_blocks = [];
+      const new_lookup = new Map();
+      const deltas = new Map();
+      i = n;
+      while (i--) {
+          const child_ctx = get_context(ctx, list, i);
+          const key = get_key(child_ctx);
+          let block = lookup.get(key);
+          if (!block) {
+              block = create_each_block(key, child_ctx);
+              block.c();
+          }
+          else if (dynamic) {
+              block.p(child_ctx, dirty);
+          }
+          new_lookup.set(key, new_blocks[i] = block);
+          if (key in old_indexes)
+              deltas.set(key, Math.abs(i - old_indexes[key]));
+      }
+      const will_move = new Set();
+      const did_move = new Set();
+      function insert(block) {
+          transition_in(block, 1);
+          block.m(node, next, lookup.has(block.key));
+          lookup.set(block.key, block);
+          next = block.first;
+          n--;
+      }
+      while (o && n) {
+          const new_block = new_blocks[n - 1];
+          const old_block = old_blocks[o - 1];
+          const new_key = new_block.key;
+          const old_key = old_block.key;
+          if (new_block === old_block) {
+              // do nothing
+              next = new_block.first;
+              o--;
+              n--;
+          }
+          else if (!new_lookup.has(old_key)) {
+              // remove old block
+              destroy(old_block, lookup);
+              o--;
+          }
+          else if (!lookup.has(new_key) || will_move.has(new_key)) {
+              insert(new_block);
+          }
+          else if (did_move.has(old_key)) {
+              o--;
+          }
+          else if (deltas.get(new_key) > deltas.get(old_key)) {
+              did_move.add(new_key);
+              insert(new_block);
+          }
+          else {
+              will_move.add(old_key);
+              o--;
+          }
+      }
+      while (o--) {
+          const old_block = old_blocks[o];
+          if (!new_lookup.has(old_block.key))
+              destroy(old_block, lookup);
+      }
+      while (n)
+          insert(new_blocks[n - 1]);
+      return new_blocks;
+  }
+  function validate_each_keys(ctx, list, get_context, get_key) {
+      const keys = new Set();
+      for (let i = 0; i < list.length; i++) {
+          const key = get_key(get_context(ctx, list, i));
+          if (keys.has(key)) {
+              throw new Error(`Cannot have duplicate keys in a keyed each`);
+          }
+          keys.add(key);
+      }
+  }
 
   function get_spread_update(levels, updates) {
       const update = {};
@@ -2592,6 +2635,28 @@
 
   var axios$1 = axios_1;
 
+  function cubicOut(t) {
+      const f = t - 1.0;
+      return f * f * f + 1.0;
+  }
+
+  function flip(node, animation, params) {
+      const style = getComputedStyle(node);
+      const transform = style.transform === 'none' ? '' : style.transform;
+      const scaleX = animation.from.width / node.clientWidth;
+      const scaleY = animation.from.height / node.clientHeight;
+      const dx = (animation.from.left - animation.to.left) / scaleX;
+      const dy = (animation.from.top - animation.to.top) / scaleY;
+      const d = Math.sqrt(dx * dx + dy * dy);
+      const { delay = 0, duration = (d) => Math.sqrt(d) * 120, easing = cubicOut } = params;
+      return {
+          delay,
+          duration: is_function(duration) ? duration(d) : duration,
+          easing,
+          css: (_t, u) => `transform: ${transform} translate(${u * dx}px, ${u * dy}px);`
+      };
+  }
+
   var commonjsGlobal = typeof globalThis !== 'undefined' ? globalThis : typeof window !== 'undefined' ? window : typeof global !== 'undefined' ? global : typeof self !== 'undefined' ? self : {};
 
   function unwrapExports (x) {
@@ -4153,11 +4218,6 @@
   var dist_5 = dist.TextNode;
   var dist_6 = dist.NodeType;
 
-  function cubicOut(t) {
-      const f = t - 1.0;
-      return f * f * f + 1.0;
-  }
-
   function fly(node, { delay = 0, duration = 400, easing = cubicOut, x = 0, y = 0, opacity = 0 }) {
       const style = getComputedStyle(node);
       const target_opacity = +style.opacity;
@@ -4180,34 +4240,69 @@
   });
   var FileSaver_min_1 = FileSaver_min.saveAs;
 
+  var fileDownload = function(data, filename, mime, bom) {
+      var blobData = (typeof bom !== 'undefined') ? [bom, data] : [data];
+      var blob = new Blob(blobData, {type: mime || 'application/octet-stream'});
+      if (typeof window.navigator.msSaveBlob !== 'undefined') {
+          // IE workaround for "HTML7007: One or more blob URLs were
+          // revoked by closing the blob for which they were created.
+          // These URLs will no longer resolve as the data backing
+          // the URL has been freed."
+          window.navigator.msSaveBlob(blob, filename);
+      }
+      else {
+          var blobURL = (window.URL && window.URL.createObjectURL) ? window.URL.createObjectURL(blob) : window.webkitURL.createObjectURL(blob);
+          var tempLink = document.createElement('a');
+          tempLink.style.display = 'none';
+          tempLink.href = blobURL;
+          tempLink.setAttribute('download', filename);
+
+          // Safari thinks _blank anchor are pop ups. We only want to set _blank
+          // target if the browser does not support the HTML5 download attribute.
+          // This allows you to download files in desktop safari if pop up blocking
+          // is enabled.
+          if (typeof tempLink.download === 'undefined') {
+              tempLink.setAttribute('target', '_blank');
+          }
+
+          document.body.appendChild(tempLink);
+          tempLink.click();
+
+          // Fixes "webkit blob resource error 1"
+          setTimeout(function() {
+              document.body.removeChild(tempLink);
+              window.URL.revokeObjectURL(blobURL);
+          }, 0);
+      }
+  };
+
   /* src/components/Search.svelte generated by Svelte v3.20.1 */
 
-  const { console: console_1, document: document_1 } = globals;
+  const { console: console_1, document: document_1, window: window_1 } = globals;
   const file$1 = "src/components/Search.svelte";
 
   function get_each_context(ctx, list, i) {
   	const child_ctx = ctx.slice();
-  	child_ctx[24] = list[i];
-  	child_ctx[49] = i;
+  	child_ctx[26] = list[i];
+  	child_ctx[53] = i;
   	return child_ctx;
   }
 
-  // (367:32) 
+  // (435:34) 
   function create_if_block_1(ctx) {
   	let div;
-  	let t0_value = /*result*/ ctx[24] + "";
+  	let t0_value = /*result*/ ctx[26] + "";
   	let t0;
   	let t1;
   	let t2;
   	let hr;
-  	let current;
   	let dispose;
 
   	function click_handler_2(...args) {
-  		return /*click_handler_2*/ ctx[42](/*index*/ ctx[49], ...args);
+  		return /*click_handler_2*/ ctx[46](/*index*/ ctx[53], ...args);
   	}
 
-  	let if_block = /*book_menu*/ ctx[19][/*index*/ ctx[49]] && create_if_block_2(ctx);
+  	let if_block = /*book_menu*/ ctx[21][/*index*/ ctx[53]] && create_if_block_2(ctx);
 
   	const block = {
   		c: function create() {
@@ -4217,9 +4312,9 @@
   			if (if_block) if_block.c();
   			t2 = space();
   			hr = element("hr");
-  			add_location(div, file$1, 367, 6, 11280);
+  			add_location(div, file$1, 435, 8, 13134);
   			attr_dev(hr, "class", "svelte-yq10dq");
-  			add_location(hr, file$1, 469, 6, 14892);
+  			add_location(hr, file$1, 556, 8, 17541);
   		},
   		m: function mount(target, anchor, remount) {
   			insert_dev(target, div, anchor);
@@ -4228,42 +4323,25 @@
   			if (if_block) if_block.m(target, anchor);
   			insert_dev(target, t2, anchor);
   			insert_dev(target, hr, anchor);
-  			current = true;
   			if (remount) dispose();
   			dispose = listen_dev(div, "click", click_handler_2, false, false, false);
   		},
   		p: function update(new_ctx, dirty) {
   			ctx = new_ctx;
-  			if ((!current || dirty[0] & /*results*/ 512) && t0_value !== (t0_value = /*result*/ ctx[24] + "")) set_data_dev(t0, t0_value);
+  			if (dirty[0] & /*results*/ 256 && t0_value !== (t0_value = /*result*/ ctx[26] + "")) set_data_dev(t0, t0_value);
 
-  			if (/*book_menu*/ ctx[19][/*index*/ ctx[49]]) {
+  			if (/*book_menu*/ ctx[21][/*index*/ ctx[53]]) {
   				if (if_block) {
   					if_block.p(ctx, dirty);
-  					transition_in(if_block, 1);
   				} else {
   					if_block = create_if_block_2(ctx);
   					if_block.c();
-  					transition_in(if_block, 1);
   					if_block.m(t2.parentNode, t2);
   				}
   			} else if (if_block) {
-  				group_outros();
-
-  				transition_out(if_block, 1, 1, () => {
-  					if_block = null;
-  				});
-
-  				check_outros();
+  				if_block.d(1);
+  				if_block = null;
   			}
-  		},
-  		i: function intro(local) {
-  			if (current) return;
-  			transition_in(if_block);
-  			current = true;
-  		},
-  		o: function outro(local) {
-  			transition_out(if_block);
-  			current = false;
   		},
   		d: function destroy(detaching) {
   			if (detaching) detach_dev(div);
@@ -4279,17 +4357,17 @@
   		block,
   		id: create_if_block_1.name,
   		type: "if",
-  		source: "(367:32) ",
+  		source: "(435:34) ",
   		ctx
   	});
 
   	return block;
   }
 
-  // (365:4) {#if result.includes('Найденные книги') || result.includes('Найденные писатели') || result.includes('Найденные серии')}
+  // (433:6) {#if result.includes('Найденные книги') || result.includes('Найденные писатели') || result.includes('Найденные серии')}
   function create_if_block(ctx) {
   	let h2;
-  	let t_value = /*result*/ ctx[24] + "";
+  	let t_value = /*result*/ ctx[26] + "";
   	let t;
 
   	const block = {
@@ -4297,17 +4375,15 @@
   			h2 = element("h2");
   			t = text(t_value);
   			set_style(h2, "font-size", "1.5em");
-  			add_location(h2, file$1, 365, 6, 11198);
+  			add_location(h2, file$1, 433, 8, 13048);
   		},
   		m: function mount(target, anchor) {
   			insert_dev(target, h2, anchor);
   			append_dev(h2, t);
   		},
   		p: function update(ctx, dirty) {
-  			if (dirty[0] & /*results*/ 512 && t_value !== (t_value = /*result*/ ctx[24] + "")) set_data_dev(t, t_value);
+  			if (dirty[0] & /*results*/ 256 && t_value !== (t_value = /*result*/ ctx[26] + "")) set_data_dev(t, t_value);
   		},
-  		i: noop,
-  		o: noop,
   		d: function destroy(detaching) {
   			if (detaching) detach_dev(h2);
   		}
@@ -4317,14 +4393,14 @@
   		block,
   		id: create_if_block.name,
   		type: "if",
-  		source: "(365:4) {#if result.includes('Найденные книги') || result.includes('Найденные писатели') || result.includes('Найденные серии')}",
+  		source: "(433:6) {#if result.includes('Найденные книги') || result.includes('Найденные писатели') || result.includes('Найденные серии')}",
   		ctx
   	});
 
   	return block;
   }
 
-  // (369:6) {#if book_menu[index]}
+  // (437:8) {#if book_menu[index]}
   function create_if_block_2(ctx) {
   	let div;
   	let button0;
@@ -4335,30 +4411,33 @@
   	let img1;
   	let img1_src_value;
   	let t1;
+  	let t2;
+  	let t3;
   	let button2;
   	let img2;
   	let img2_src_value;
-  	let t2;
-  	let div_transition;
-  	let t3;
-  	let if_block1_anchor;
-  	let current;
+  	let t4;
+  	let t5;
+  	let if_block3_anchor;
   	let dispose;
 
   	function click_handler_3(...args) {
-  		return /*click_handler_3*/ ctx[43](/*index*/ ctx[49], ...args);
+  		return /*click_handler_3*/ ctx[47](/*index*/ ctx[53], ...args);
   	}
 
   	function click_handler_4(...args) {
-  		return /*click_handler_4*/ ctx[44](/*index*/ ctx[49], ...args);
+  		return /*click_handler_4*/ ctx[48](/*index*/ ctx[53], /*result*/ ctx[26], ...args);
   	}
+
+  	let if_block0 = /*loading_to_library*/ ctx[18][/*index*/ ctx[53]] && create_if_block_6(ctx);
+  	let if_block1 = /*book_added*/ ctx[19][/*index*/ ctx[53]] && create_if_block_5(ctx);
 
   	function click_handler_5(...args) {
-  		return /*click_handler_5*/ ctx[45](/*index*/ ctx[49], ...args);
+  		return /*click_handler_5*/ ctx[49](/*index*/ ctx[53], ...args);
   	}
 
-  	let if_block0 = /*show_download_options*/ ctx[22][/*index*/ ctx[49]] && create_if_block_4(ctx);
-  	let if_block1 = /*show_details*/ ctx[21][/*index*/ ctx[49]] && create_if_block_3(ctx);
+  	let if_block2 = /*show_download_options*/ ctx[24][/*index*/ ctx[53]] && create_if_block_4(ctx);
+  	let if_block3 = /*show_details*/ ctx[23][/*index*/ ctx[53]] && create_if_block_3(ctx);
 
   	const block = {
   		c: function create() {
@@ -4369,37 +4448,41 @@
   			button1 = element("button");
   			img1 = element("img");
   			t1 = space();
+  			if (if_block0) if_block0.c();
+  			t2 = space();
+  			if (if_block1) if_block1.c();
+  			t3 = space();
   			button2 = element("button");
   			img2 = element("img");
-  			t2 = space();
-  			if (if_block0) if_block0.c();
-  			t3 = space();
-  			if (if_block1) if_block1.c();
-  			if_block1_anchor = empty();
+  			t4 = space();
+  			if (if_block2) if_block2.c();
+  			t5 = space();
+  			if (if_block3) if_block3.c();
+  			if_block3_anchor = empty();
   			attr_dev(img0, "id", "show_details_img");
   			set_style(img0, "max-height", "1em");
   			if (img0.src !== (img0_src_value = "./assets/details.svg")) attr_dev(img0, "src", img0_src_value);
   			attr_dev(img0, "alt", "details");
-  			add_location(img0, file$1, 376, 12, 11674);
+  			add_location(img0, file$1, 443, 14, 13493);
   			attr_dev(button0, "id", "show_details_btn");
-  			attr_dev(button0, "class", "focus:outline-none bg-mainbtn m-2 static rounded-lg py-2 px-4");
-  			add_location(button0, file$1, 372, 10, 11489);
+  			attr_dev(button0, "class", "focus:outline-none bg-mainbtn m-2 static rounded-lg py-2\n              px-4");
+  			add_location(button0, file$1, 438, 12, 13286);
   			set_style(img1, "max-height", "1em");
   			if (img1.src !== (img1_src_value = "./assets/library.svg")) attr_dev(img1, "src", img1_src_value);
   			attr_dev(img1, "alt", "library");
-  			add_location(img1, file$1, 386, 12, 12040);
+  			add_location(img1, file$1, 454, 14, 13924);
   			set_style(button1, "display", "flex");
-  			attr_dev(button1, "class", "focus:outline-none bg-mainbtn m-2 static rounded-lg py-2 px-4");
-  			add_location(button1, file$1, 382, 10, 11855);
+  			attr_dev(button1, "class", "focus:outline-none bg-mainbtn m-2 static rounded-lg py-2\n              px-4");
+  			add_location(button1, file$1, 449, 12, 13686);
   			set_style(img2, "max-height", "1em");
   			if (img2.src !== (img2_src_value = "./assets/download.svg")) attr_dev(img2, "src", img2_src_value);
   			attr_dev(img2, "alt", "download");
-  			add_location(img2, file$1, 394, 12, 12344);
-  			attr_dev(button2, "class", "focus:outline-none bg-mainbtn m-2 static rounded-lg py-2 px-4");
-  			add_location(button2, file$1, 391, 10, 12185);
+  			add_location(img2, file$1, 475, 14, 14677);
+  			attr_dev(button2, "class", "focus:outline-none bg-mainbtn m-2 static rounded-lg py-2\n              px-4");
+  			add_location(button2, file$1, 471, 12, 14498);
   			set_style(div, "color", "green");
   			set_style(div, "display", "flex");
-  			add_location(div, file$1, 369, 8, 11374);
+  			add_location(div, file$1, 437, 10, 13232);
   		},
   		m: function mount(target, anchor, remount) {
   			insert_dev(target, div, anchor);
@@ -4409,14 +4492,17 @@
   			append_dev(div, button1);
   			append_dev(button1, img1);
   			append_dev(div, t1);
+  			if (if_block0) if_block0.m(div, null);
+  			append_dev(div, t2);
+  			if (if_block1) if_block1.m(div, null);
+  			append_dev(div, t3);
   			append_dev(div, button2);
   			append_dev(button2, img2);
-  			append_dev(div, t2);
-  			if (if_block0) if_block0.m(div, null);
-  			insert_dev(target, t3, anchor);
-  			if (if_block1) if_block1.m(target, anchor);
-  			insert_dev(target, if_block1_anchor, anchor);
-  			current = true;
+  			append_dev(div, t4);
+  			if (if_block2) if_block2.m(div, null);
+  			insert_dev(target, t5, anchor);
+  			if (if_block3) if_block3.m(target, anchor);
+  			insert_dev(target, if_block3_anchor, anchor);
   			if (remount) run_all(dispose);
 
   			dispose = [
@@ -4428,54 +4514,62 @@
   		p: function update(new_ctx, dirty) {
   			ctx = new_ctx;
 
-  			if (/*show_download_options*/ ctx[22][/*index*/ ctx[49]]) {
-  				if (if_block0) {
-  					if_block0.p(ctx, dirty);
-  				} else {
-  					if_block0 = create_if_block_4(ctx);
+  			if (/*loading_to_library*/ ctx[18][/*index*/ ctx[53]]) {
+  				if (!if_block0) {
+  					if_block0 = create_if_block_6(ctx);
   					if_block0.c();
-  					if_block0.m(div, null);
+  					if_block0.m(div, t2);
   				}
   			} else if (if_block0) {
   				if_block0.d(1);
   				if_block0 = null;
   			}
 
-  			if (/*show_details*/ ctx[21][/*index*/ ctx[49]]) {
-  				if (if_block1) {
-  					if_block1.p(ctx, dirty);
-  				} else {
-  					if_block1 = create_if_block_3(ctx);
+  			if (/*book_added*/ ctx[19][/*index*/ ctx[53]]) {
+  				if (!if_block1) {
+  					if_block1 = create_if_block_5(ctx);
   					if_block1.c();
-  					if_block1.m(if_block1_anchor.parentNode, if_block1_anchor);
+  					if_block1.m(div, t3);
   				}
   			} else if (if_block1) {
   				if_block1.d(1);
   				if_block1 = null;
   			}
-  		},
-  		i: function intro(local) {
-  			if (current) return;
 
-  			add_render_callback(() => {
-  				if (!div_transition) div_transition = create_bidirectional_transition(div, fly, { y: -25, duration: 500 }, true);
-  				div_transition.run(1);
-  			});
+  			if (/*show_download_options*/ ctx[24][/*index*/ ctx[53]]) {
+  				if (if_block2) {
+  					if_block2.p(ctx, dirty);
+  				} else {
+  					if_block2 = create_if_block_4(ctx);
+  					if_block2.c();
+  					if_block2.m(div, null);
+  				}
+  			} else if (if_block2) {
+  				if_block2.d(1);
+  				if_block2 = null;
+  			}
 
-  			current = true;
-  		},
-  		o: function outro(local) {
-  			if (!div_transition) div_transition = create_bidirectional_transition(div, fly, { y: -25, duration: 500 }, false);
-  			div_transition.run(0);
-  			current = false;
+  			if (/*show_details*/ ctx[23][/*index*/ ctx[53]]) {
+  				if (if_block3) {
+  					if_block3.p(ctx, dirty);
+  				} else {
+  					if_block3 = create_if_block_3(ctx);
+  					if_block3.c();
+  					if_block3.m(if_block3_anchor.parentNode, if_block3_anchor);
+  				}
+  			} else if (if_block3) {
+  				if_block3.d(1);
+  				if_block3 = null;
+  			}
   		},
   		d: function destroy(detaching) {
   			if (detaching) detach_dev(div);
   			if (if_block0) if_block0.d();
-  			if (detaching && div_transition) div_transition.end();
-  			if (detaching) detach_dev(t3);
-  			if (if_block1) if_block1.d(detaching);
-  			if (detaching) detach_dev(if_block1_anchor);
+  			if (if_block1) if_block1.d();
+  			if (if_block2) if_block2.d();
+  			if (detaching) detach_dev(t5);
+  			if (if_block3) if_block3.d(detaching);
+  			if (detaching) detach_dev(if_block3_anchor);
   			run_all(dispose);
   		}
   	};
@@ -4484,14 +4578,81 @@
   		block,
   		id: create_if_block_2.name,
   		type: "if",
-  		source: "(369:6) {#if book_menu[index]}",
+  		source: "(437:8) {#if book_menu[index]}",
   		ctx
   	});
 
   	return block;
   }
 
-  // (400:10) {#if show_download_options[index]}
+  // (460:12) {#if loading_to_library[index]}
+  function create_if_block_6(ctx) {
+  	let span;
+  	let img;
+  	let img_src_value;
+
+  	const block = {
+  		c: function create() {
+  			span = element("span");
+  			img = element("img");
+  			set_style(img, "height", "2em");
+  			attr_dev(img, "class", "m-2 static");
+  			if (img.src !== (img_src_value = "./assets/loading.svg")) attr_dev(img, "src", img_src_value);
+  			attr_dev(img, "alt", "Loading...");
+  			add_location(img, file$1, 461, 16, 14148);
+  			add_location(span, file$1, 460, 14, 14125);
+  		},
+  		m: function mount(target, anchor) {
+  			insert_dev(target, span, anchor);
+  			append_dev(span, img);
+  		},
+  		d: function destroy(detaching) {
+  			if (detaching) detach_dev(span);
+  		}
+  	};
+
+  	dispatch_dev("SvelteRegisterBlock", {
+  		block,
+  		id: create_if_block_6.name,
+  		type: "if",
+  		source: "(460:12) {#if loading_to_library[index]}",
+  		ctx
+  	});
+
+  	return block;
+  }
+
+  // (469:12) {#if book_added[index]}
+  function create_if_block_5(ctx) {
+  	let span;
+
+  	const block = {
+  		c: function create() {
+  			span = element("span");
+  			span.textContent = "Книга добавлена в библиотеку";
+  			attr_dev(span, "class", "m-2 text-maintxt");
+  			add_location(span, file$1, 469, 14, 14401);
+  		},
+  		m: function mount(target, anchor) {
+  			insert_dev(target, span, anchor);
+  		},
+  		d: function destroy(detaching) {
+  			if (detaching) detach_dev(span);
+  		}
+  	};
+
+  	dispatch_dev("SvelteRegisterBlock", {
+  		block,
+  		id: create_if_block_5.name,
+  		type: "if",
+  		source: "(469:12) {#if book_added[index]}",
+  		ctx
+  	});
+
+  	return block;
+  }
+
+  // (481:12) {#if show_download_options[index]}
   function create_if_block_4(ctx) {
   	let a0;
   	let t0;
@@ -4515,18 +4676,18 @@
   			t3 = space();
   			a2 = element("a");
   			t4 = text("mobi");
-  			attr_dev(a0, "class", "text-maintxt focus:outline-none bg-mainbtn m-2 static\n              rounded-lg py-2 px-4");
-  			attr_dev(a0, "href", a0_href_value = /*download_links*/ ctx[23][/*index*/ ctx[49]].fb2);
+  			attr_dev(a0, "class", "text-maintxt focus:outline-none bg-mainbtn m-2 static\n                rounded-lg py-2 px-4");
+  			attr_dev(a0, "href", a0_href_value = /*download_links*/ ctx[25][/*index*/ ctx[53]].fb2);
   			attr_dev(a0, "download", "");
-  			add_location(a0, file$1, 422, 12, 13406);
-  			attr_dev(a1, "class", "text-maintxt focus:outline-none bg-mainbtn m-2 static\n              rounded-lg py-2 px-4");
-  			attr_dev(a1, "href", a1_href_value = /*download_links*/ ctx[23][/*index*/ ctx[49]].epub);
+  			add_location(a0, file$1, 503, 14, 15753);
+  			attr_dev(a1, "class", "text-maintxt focus:outline-none bg-mainbtn m-2 static\n                rounded-lg py-2 px-4");
+  			attr_dev(a1, "href", a1_href_value = /*download_links*/ ctx[25][/*index*/ ctx[53]].epub);
   			attr_dev(a1, "download", "");
-  			add_location(a1, file$1, 429, 12, 13638);
-  			attr_dev(a2, "class", "text-maintxt focus:outline-none bg-mainbtn m-2 static\n              rounded-lg py-2 px-4");
-  			attr_dev(a2, "href", a2_href_value = /*download_links*/ ctx[23][/*index*/ ctx[49]].mobi);
+  			add_location(a1, file$1, 510, 14, 15999);
+  			attr_dev(a2, "class", "text-maintxt focus:outline-none bg-mainbtn m-2 static\n                rounded-lg py-2 px-4");
+  			attr_dev(a2, "href", a2_href_value = /*download_links*/ ctx[25][/*index*/ ctx[53]].mobi);
   			attr_dev(a2, "download", "");
-  			add_location(a2, file$1, 436, 12, 13872);
+  			add_location(a2, file$1, 517, 14, 16247);
   		},
   		m: function mount(target, anchor) {
   			insert_dev(target, a0, anchor);
@@ -4539,15 +4700,15 @@
   			append_dev(a2, t4);
   		},
   		p: function update(ctx, dirty) {
-  			if (dirty[0] & /*download_links*/ 8388608 && a0_href_value !== (a0_href_value = /*download_links*/ ctx[23][/*index*/ ctx[49]].fb2)) {
+  			if (dirty[0] & /*download_links, results*/ 33554688 && a0_href_value !== (a0_href_value = /*download_links*/ ctx[25][/*index*/ ctx[53]].fb2)) {
   				attr_dev(a0, "href", a0_href_value);
   			}
 
-  			if (dirty[0] & /*download_links*/ 8388608 && a1_href_value !== (a1_href_value = /*download_links*/ ctx[23][/*index*/ ctx[49]].epub)) {
+  			if (dirty[0] & /*download_links, results*/ 33554688 && a1_href_value !== (a1_href_value = /*download_links*/ ctx[25][/*index*/ ctx[53]].epub)) {
   				attr_dev(a1, "href", a1_href_value);
   			}
 
-  			if (dirty[0] & /*download_links*/ 8388608 && a2_href_value !== (a2_href_value = /*download_links*/ ctx[23][/*index*/ ctx[49]].mobi)) {
+  			if (dirty[0] & /*download_links, results*/ 33554688 && a2_href_value !== (a2_href_value = /*download_links*/ ctx[25][/*index*/ ctx[53]].mobi)) {
   				attr_dev(a2, "href", a2_href_value);
   			}
   		},
@@ -4564,67 +4725,84 @@
   		block,
   		id: create_if_block_4.name,
   		type: "if",
-  		source: "(400:10) {#if show_download_options[index]}",
+  		source: "(481:12) {#if show_download_options[index]}",
   		ctx
   	});
 
   	return block;
   }
 
-  // (446:8) {#if show_details[index]}
+  // (527:10) {#if show_details[index]}
   function create_if_block_3(ctx) {
-  	let div3;
+  	let div4;
   	let div0;
   	let button0;
   	let t1;
   	let div1;
+  	let img;
+  	let img_src_value;
+  	let div1_class_value;
   	let t2;
   	let div2;
+  	let t3;
+  	let div3;
   	let button1;
   	let dispose;
 
   	function click_handler_6(...args) {
-  		return /*click_handler_6*/ ctx[46](/*index*/ ctx[49], ...args);
+  		return /*click_handler_6*/ ctx[50](/*index*/ ctx[53], ...args);
   	}
 
   	function click_handler_7(...args) {
-  		return /*click_handler_7*/ ctx[47](/*index*/ ctx[49], ...args);
+  		return /*click_handler_7*/ ctx[51](/*index*/ ctx[53], ...args);
   	}
 
   	const block = {
   		c: function create() {
-  			div3 = element("div");
+  			div4 = element("div");
   			div0 = element("div");
   			button0 = element("button");
   			button0.textContent = "Закрыть";
   			t1 = space();
   			div1 = element("div");
+  			img = element("img");
   			t2 = space();
   			div2 = element("div");
+  			t3 = space();
+  			div3 = element("div");
   			button1 = element("button");
   			button1.textContent = "Закрыть";
-  			attr_dev(button0, "class", "focus:outline-none bg-mainbtn m-2 static rounded-lg py-2\n                px-4");
-  			add_location(button0, file$1, 448, 14, 14256);
+  			attr_dev(button0, "class", "focus:outline-none bg-mainbtn m-2 static rounded-lg\n                  py-2 px-4");
+  			add_location(button0, file$1, 529, 16, 16655);
   			attr_dev(div0, "class", "div_for_button svelte-yq10dq");
-  			add_location(div0, file$1, 447, 12, 14213);
-  			add_location(div1, file$1, 455, 12, 14498);
-  			attr_dev(button1, "class", "focus:outline-none bg-mainbtn m-2 static rounded-lg py-2\n                px-4");
-  			add_location(button1, file$1, 459, 14, 14613);
-  			attr_dev(div2, "class", "div_for_button svelte-yq10dq");
-  			add_location(div2, file$1, 458, 12, 14570);
-  			attr_dev(div3, "class", "outer_details_div svelte-yq10dq");
-  			add_location(div3, file$1, 446, 10, 14169);
+  			add_location(div0, file$1, 528, 14, 16610);
+  			set_style(img, "margin", "auto");
+  			if (img.src !== (img_src_value = "./assets/loading.svg")) attr_dev(img, "src", img_src_value);
+  			attr_dev(img, "alt", "Loading...");
+  			add_location(img, file$1, 537, 16, 16957);
+  			attr_dev(div1, "class", div1_class_value = "" + (null_to_empty(/*loading_details*/ ctx[17]) + " svelte-yq10dq"));
+  			add_location(div1, file$1, 536, 14, 16911);
+  			add_location(div2, file$1, 542, 14, 17119);
+  			attr_dev(button1, "class", "focus:outline-none bg-mainbtn m-2 static rounded-lg\n                  py-2 px-4");
+  			add_location(button1, file$1, 546, 16, 17242);
+  			attr_dev(div3, "class", "div_for_button svelte-yq10dq");
+  			add_location(div3, file$1, 545, 14, 17197);
+  			attr_dev(div4, "class", "outer_details_div svelte-yq10dq");
+  			add_location(div4, file$1, 527, 12, 16564);
   		},
   		m: function mount(target, anchor, remount) {
-  			insert_dev(target, div3, anchor);
-  			append_dev(div3, div0);
+  			insert_dev(target, div4, anchor);
+  			append_dev(div4, div0);
   			append_dev(div0, button0);
-  			append_dev(div3, t1);
-  			append_dev(div3, div1);
-  			div1.innerHTML = /*details_text*/ ctx[20];
-  			append_dev(div3, t2);
-  			append_dev(div3, div2);
-  			append_dev(div2, button1);
+  			append_dev(div4, t1);
+  			append_dev(div4, div1);
+  			append_dev(div1, img);
+  			append_dev(div4, t2);
+  			append_dev(div4, div2);
+  			div2.innerHTML = /*details_text*/ ctx[22];
+  			append_dev(div4, t3);
+  			append_dev(div4, div3);
+  			append_dev(div3, button1);
   			if (remount) run_all(dispose);
 
   			dispose = [
@@ -4634,9 +4812,14 @@
   		},
   		p: function update(new_ctx, dirty) {
   			ctx = new_ctx;
-  			if (dirty[0] & /*details_text*/ 1048576) div1.innerHTML = /*details_text*/ ctx[20];		},
+
+  			if (dirty[0] & /*loading_details*/ 131072 && div1_class_value !== (div1_class_value = "" + (null_to_empty(/*loading_details*/ ctx[17]) + " svelte-yq10dq"))) {
+  				attr_dev(div1, "class", div1_class_value);
+  			}
+
+  			if (dirty[0] & /*details_text*/ 4194304) div2.innerHTML = /*details_text*/ ctx[22];		},
   		d: function destroy(detaching) {
-  			if (detaching) detach_dev(div3);
+  			if (detaching) detach_dev(div4);
   			run_all(dispose);
   		}
   	};
@@ -4645,96 +4828,75 @@
   		block,
   		id: create_if_block_3.name,
   		type: "if",
-  		source: "(446:8) {#if show_details[index]}",
+  		source: "(527:10) {#if show_details[index]}",
   		ctx
   	});
 
   	return block;
   }
 
-  // (364:2) {#each results as result, index}
-  function create_each_block(ctx) {
+  // (431:2) {#each results as result, index (index)}
+  function create_each_block(key_1, ctx) {
+  	let div;
   	let show_if;
-  	let current_block_type_index;
-  	let if_block;
-  	let if_block_anchor;
-  	let current;
-  	const if_block_creators = [create_if_block, create_if_block_1];
-  	const if_blocks = [];
+  	let t;
+  	let rect;
+  	let stop_animation = noop;
 
   	function select_block_type(ctx, dirty) {
-  		if (dirty[0] & /*results*/ 512) show_if = !!(/*result*/ ctx[24].includes("Найденные книги") || /*result*/ ctx[24].includes("Найденные писатели") || /*result*/ ctx[24].includes("Найденные серии"));
-  		if (show_if) return 0;
-  		if (/*result*/ ctx[24].length > 0) return 1;
-  		return -1;
+  		if (show_if == null || dirty[0] & /*results*/ 256) show_if = !!(/*result*/ ctx[26].includes("Найденные книги") || /*result*/ ctx[26].includes("Найденные писатели") || /*result*/ ctx[26].includes("Найденные серии"));
+  		if (show_if) return create_if_block;
+  		if (/*result*/ ctx[26].length > 0) return create_if_block_1;
   	}
 
-  	if (~(current_block_type_index = select_block_type(ctx, [-1]))) {
-  		if_block = if_blocks[current_block_type_index] = if_block_creators[current_block_type_index](ctx);
-  	}
+  	let current_block_type = select_block_type(ctx, [-1]);
+  	let if_block = current_block_type && current_block_type(ctx);
 
   	const block = {
+  		key: key_1,
+  		first: null,
   		c: function create() {
+  			div = element("div");
   			if (if_block) if_block.c();
-  			if_block_anchor = empty();
+  			t = space();
+  			add_location(div, file$1, 431, 4, 12895);
+  			this.first = div;
   		},
   		m: function mount(target, anchor) {
-  			if (~current_block_type_index) {
-  				if_blocks[current_block_type_index].m(target, anchor);
-  			}
-
-  			insert_dev(target, if_block_anchor, anchor);
-  			current = true;
+  			insert_dev(target, div, anchor);
+  			if (if_block) if_block.m(div, null);
+  			append_dev(div, t);
   		},
   		p: function update(ctx, dirty) {
-  			let previous_block_index = current_block_type_index;
-  			current_block_type_index = select_block_type(ctx, dirty);
-
-  			if (current_block_type_index === previous_block_index) {
-  				if (~current_block_type_index) {
-  					if_blocks[current_block_type_index].p(ctx, dirty);
-  				}
+  			if (current_block_type === (current_block_type = select_block_type(ctx, dirty)) && if_block) {
+  				if_block.p(ctx, dirty);
   			} else {
+  				if (if_block) if_block.d(1);
+  				if_block = current_block_type && current_block_type(ctx);
+
   				if (if_block) {
-  					group_outros();
-
-  					transition_out(if_blocks[previous_block_index], 1, 1, () => {
-  						if_blocks[previous_block_index] = null;
-  					});
-
-  					check_outros();
-  				}
-
-  				if (~current_block_type_index) {
-  					if_block = if_blocks[current_block_type_index];
-
-  					if (!if_block) {
-  						if_block = if_blocks[current_block_type_index] = if_block_creators[current_block_type_index](ctx);
-  						if_block.c();
-  					}
-
-  					transition_in(if_block, 1);
-  					if_block.m(if_block_anchor.parentNode, if_block_anchor);
-  				} else {
-  					if_block = null;
+  					if_block.c();
+  					if_block.m(div, t);
   				}
   			}
   		},
-  		i: function intro(local) {
-  			if (current) return;
-  			transition_in(if_block);
-  			current = true;
+  		r: function measure() {
+  			rect = div.getBoundingClientRect();
   		},
-  		o: function outro(local) {
-  			transition_out(if_block);
-  			current = false;
+  		f: function fix() {
+  			fix_position(div);
+  			stop_animation();
+  		},
+  		a: function animate() {
+  			stop_animation();
+  			stop_animation = create_animation(div, rect, flip, {});
   		},
   		d: function destroy(detaching) {
-  			if (~current_block_type_index) {
-  				if_blocks[current_block_type_index].d(detaching);
-  			}
+  			if (detaching) detach_dev(div);
 
-  			if (detaching) detach_dev(if_block_anchor);
+  			if (if_block) {
+  				if_block.d();
+  			}
   		}
   	};
 
@@ -4742,7 +4904,7 @@
   		block,
   		id: create_each_block.name,
   		type: "each",
-  		source: "(364:2) {#each results as result, index}",
+  		source: "(431:2) {#each results as result, index (index)}",
   		ctx
   	});
 
@@ -4756,77 +4918,73 @@
   	let t1;
   	let button0;
   	let t3;
-  	let button1;
-  	let t5;
-  	let a;
-  	let t7;
   	let div2;
   	let label0;
   	let input1;
-  	let t8;
+  	let t4;
   	let span0;
-  	let t9;
+  	let t5;
   	let span1;
-  	let t11;
+  	let t7;
   	let span2;
-  	let t13;
+  	let t9;
   	let label1;
   	let input2;
-  	let t14;
+  	let t10;
   	let span3;
-  	let t15;
+  	let t11;
   	let span4;
-  	let t17;
+  	let t13;
   	let span5;
-  	let t19;
+  	let t15;
   	let label2;
   	let input3;
-  	let t20;
+  	let t16;
   	let span6;
-  	let t21;
+  	let t17;
   	let span7;
-  	let t23;
+  	let t19;
   	let span8;
-  	let t25;
+  	let t21;
   	let div1;
-  	let button2;
-  	let t26;
-  	let button2_class_value;
-  	let t27;
+  	let button1;
+  	let t22;
+  	let button1_class_value;
+  	let t23;
   	let p;
-  	let t28;
-  	let t29_value = /*page_number*/ ctx[8] + 1 + "";
-  	let t29;
-  	let t30;
-  	let t31;
+  	let t24;
+  	let t25_value = /*page_number*/ ctx[7] + 1 + "";
+  	let t25;
+  	let t26;
+  	let t27;
   	let p_class_value;
-  	let t32;
-  	let button3;
-  	let t33;
-  	let button3_class_value;
-  	let t34;
+  	let t28;
+  	let button2;
+  	let t29;
+  	let button2_class_value;
+  	let t30;
   	let div3;
   	let img;
   	let img_src_value;
   	let div3_class_value;
-  	let t35;
+  	let t31;
   	let div4;
-  	let div4_class_value;
-  	let t36;
-  	let div5;
-  	let current;
-  	let dispose;
-  	let each_value = /*results*/ ctx[9];
-  	validate_each_argument(each_value);
   	let each_blocks = [];
+  	let each_1_lookup = new Map();
+  	let div4_class_value;
+  	let t32;
+  	let div5;
+  	let dispose;
+  	let each_value = /*results*/ ctx[8];
+  	validate_each_argument(each_value);
+  	const get_key = ctx => /*index*/ ctx[53];
+  	validate_each_keys(ctx, each_value, get_each_context, get_key);
 
   	for (let i = 0; i < each_value.length; i += 1) {
-  		each_blocks[i] = create_each_block(get_each_context(ctx, each_value, i));
+  		let child_ctx = get_each_context(ctx, each_value, i);
+  		let key = get_key(child_ctx);
+  		each_1_lookup.set(key, each_blocks[i] = create_each_block(key, child_ctx));
   	}
-
-  	const out = i => transition_out(each_blocks[i], 1, 1, () => {
-  		each_blocks[i] = null;
-  	});
 
   	const block = {
   		c: function create() {
@@ -4837,130 +4995,121 @@
   			button0 = element("button");
   			button0.textContent = "Search";
   			t3 = space();
-  			button1 = element("button");
-  			button1.textContent = "blob";
-  			t5 = space();
-  			a = element("a");
-  			a.textContent = "zip";
-  			t7 = space();
   			div2 = element("div");
   			label0 = element("label");
   			input1 = element("input");
-  			t8 = space();
+  			t4 = space();
   			span0 = element("span");
-  			t9 = space();
+  			t5 = space();
   			span1 = element("span");
   			span1.textContent = "Серии";
-  			t11 = space();
+  			t7 = space();
   			span2 = element("span");
   			span2.textContent = " ";
-  			t13 = space();
+  			t9 = space();
   			label1 = element("label");
   			input2 = element("input");
-  			t14 = space();
+  			t10 = space();
   			span3 = element("span");
-  			t15 = space();
+  			t11 = space();
   			span4 = element("span");
   			span4.textContent = "Авторы";
-  			t17 = space();
+  			t13 = space();
   			span5 = element("span");
   			span5.textContent = " ";
-  			t19 = space();
+  			t15 = space();
   			label2 = element("label");
   			input3 = element("input");
-  			t20 = space();
+  			t16 = space();
   			span6 = element("span");
-  			t21 = space();
+  			t17 = space();
   			span7 = element("span");
   			span7.textContent = "Книги";
-  			t23 = space();
+  			t19 = space();
   			span8 = element("span");
   			span8.textContent = " ";
-  			t25 = space();
+  			t21 = space();
   			div1 = element("div");
-  			button2 = element("button");
-  			t26 = text("Предыдущая");
-  			t27 = space();
+  			button1 = element("button");
+  			t22 = text("Предыдущая");
+  			t23 = space();
   			p = element("p");
-  			t28 = text("Страница ");
-  			t29 = text(t29_value);
-  			t30 = text(" из ");
-  			t31 = text(/*pages_total*/ ctx[13]);
-  			t32 = space();
-  			button3 = element("button");
-  			t33 = text("Следующая");
-  			t34 = space();
+  			t24 = text("Страница ");
+  			t25 = text(t25_value);
+  			t26 = text(" из ");
+  			t27 = text(/*pages_total*/ ctx[12]);
+  			t28 = space();
+  			button2 = element("button");
+  			t29 = text("Следующая");
+  			t30 = space();
   			div3 = element("div");
   			img = element("img");
-  			t35 = space();
+  			t31 = space();
   			div4 = element("div");
 
   			for (let i = 0; i < each_blocks.length; i += 1) {
   				each_blocks[i].c();
   			}
 
-  			t36 = space();
+  			t32 = space();
   			div5 = element("div");
   			document_1.title = "kraken book";
   			attr_dev(input0, "id", "search_input");
   			attr_dev(input0, "class", "bg-white focus:outline-none border border-gray-300 rounded-lg py-2\n    px-4 w-9 static m-2");
   			attr_dev(input0, "type", "search");
   			attr_dev(input0, "placeholder", "Enter book name");
-  			add_location(input0, file$1, 304, 2, 9446);
+  			add_location(input0, file$1, 380, 2, 11496);
   			attr_dev(button0, "class", "focus:outline-none bg-mainbtn m-2 static rounded-lg py-2 px-4");
-  			add_location(button0, file$1, 311, 2, 9659);
-  			attr_dev(button1, "class", "focus:outline-none bg-mainbtn m-2 static rounded-lg py-2 px-4");
-  			add_location(button1, file$1, 316, 2, 9798);
-  			attr_dev(a, "href", "http://static.flibusta.is:443/b.fb2/Sever_Stalin-protiv-vyrodkov-Arbata-.M0SIqg.236755.fb2.zip");
-  			add_location(a, file$1, 321, 2, 9927);
+  			add_location(button0, file$1, 387, 2, 11709);
   			attr_dev(div0, "class", "");
-  			add_location(div0, file$1, 303, 0, 9429);
+  			add_location(div0, file$1, 379, 0, 11479);
   			attr_dev(input1, "type", "checkbox");
   			attr_dev(input1, "class", "svelte-yq10dq");
-  			add_location(input1, file$1, 329, 4, 10120);
+  			add_location(input1, file$1, 396, 4, 11914);
   			attr_dev(span0, "class", "slider round svelte-yq10dq");
-  			add_location(span0, file$1, 330, 4, 10180);
+  			add_location(span0, file$1, 397, 4, 11974);
   			attr_dev(label0, "class", "switch svelte-yq10dq");
-  			add_location(label0, file$1, 328, 2, 10093);
-  			add_location(span1, file$1, 332, 2, 10223);
-  			add_location(span2, file$1, 333, 2, 10244);
+  			add_location(label0, file$1, 395, 2, 11887);
+  			add_location(span1, file$1, 399, 2, 12017);
+  			add_location(span2, file$1, 400, 2, 12038);
   			attr_dev(input2, "type", "checkbox");
   			attr_dev(input2, "class", "svelte-yq10dq");
-  			add_location(input2, file$1, 335, 4, 10293);
+  			add_location(input2, file$1, 402, 4, 12087);
   			attr_dev(span3, "class", "slider round svelte-yq10dq");
-  			add_location(span3, file$1, 336, 4, 10353);
+  			add_location(span3, file$1, 403, 4, 12147);
   			attr_dev(label1, "class", "switch svelte-yq10dq");
-  			add_location(label1, file$1, 334, 2, 10266);
-  			add_location(span4, file$1, 338, 2, 10396);
-  			add_location(span5, file$1, 339, 2, 10418);
+  			add_location(label1, file$1, 401, 2, 12060);
+  			add_location(span4, file$1, 405, 2, 12190);
+  			add_location(span5, file$1, 406, 2, 12212);
   			attr_dev(input3, "type", "checkbox");
   			attr_dev(input3, "class", "svelte-yq10dq");
-  			add_location(input3, file$1, 341, 4, 10467);
+  			add_location(input3, file$1, 408, 4, 12261);
   			attr_dev(span6, "class", "slider round svelte-yq10dq");
-  			add_location(span6, file$1, 342, 4, 10525);
+  			add_location(span6, file$1, 409, 4, 12319);
   			attr_dev(label2, "class", "switch svelte-yq10dq");
-  			add_location(label2, file$1, 340, 2, 10440);
-  			add_location(span7, file$1, 344, 2, 10568);
-  			add_location(span8, file$1, 345, 2, 10589);
-  			attr_dev(button2, "class", button2_class_value = "" + (null_to_empty(/*prev_button*/ ctx[14]) + " svelte-yq10dq"));
-  			add_location(button2, file$1, 348, 4, 10636);
-  			attr_dev(p, "class", p_class_value = "" + (null_to_empty(/*is_pages*/ ctx[16]) + " svelte-yq10dq"));
-  			add_location(p, file$1, 351, 4, 10738);
-  			attr_dev(button3, "class", button3_class_value = "" + (null_to_empty(/*next_button*/ ctx[15]) + " svelte-yq10dq"));
-  			add_location(button3, file$1, 352, 4, 10810);
+  			add_location(label2, file$1, 407, 2, 12234);
+  			add_location(span7, file$1, 411, 2, 12362);
+  			add_location(span8, file$1, 412, 2, 12383);
+  			attr_dev(button1, "class", button1_class_value = "" + (null_to_empty(/*prev_button*/ ctx[13]) + " svelte-yq10dq"));
+  			add_location(button1, file$1, 415, 4, 12430);
+  			attr_dev(p, "class", p_class_value = "" + (null_to_empty(/*is_pages*/ ctx[15]) + " svelte-yq10dq"));
+  			add_location(p, file$1, 418, 4, 12532);
+  			attr_dev(button2, "class", button2_class_value = "" + (null_to_empty(/*next_button*/ ctx[14]) + " svelte-yq10dq"));
+  			add_location(button2, file$1, 419, 4, 12604);
   			attr_dev(div1, "class", "Pages svelte-yq10dq");
-  			add_location(div1, file$1, 347, 2, 10612);
+  			add_location(div1, file$1, 414, 2, 12406);
   			attr_dev(div2, "class", "m-2 text-maintxt");
-  			add_location(div2, file$1, 327, 0, 10060);
+  			add_location(div2, file$1, 394, 0, 11854);
+  			set_style(img, "margin", "auto");
   			if (img.src !== (img_src_value = "./assets/loading.svg")) attr_dev(img, "src", img_src_value);
   			attr_dev(img, "alt", "Loading...");
-  			add_location(img, file$1, 359, 2, 10947);
-  			attr_dev(div3, "class", div3_class_value = "" + (null_to_empty(/*loading*/ ctx[17]) + " svelte-yq10dq"));
-  			add_location(div3, file$1, 358, 0, 10923);
-  			attr_dev(div4, "class", div4_class_value = "" + (null_to_empty(/*results_css*/ ctx[18]) + " svelte-yq10dq"));
-  			add_location(div4, file$1, 362, 0, 11007);
+  			add_location(img, file$1, 426, 2, 12741);
+  			attr_dev(div3, "class", div3_class_value = "" + (null_to_empty(/*loading*/ ctx[16]) + " svelte-yq10dq"));
+  			add_location(div3, file$1, 425, 0, 12717);
+  			attr_dev(div4, "class", div4_class_value = "" + (null_to_empty(/*results_css*/ ctx[20]) + " svelte-yq10dq"));
+  			add_location(div4, file$1, 429, 0, 12822);
   			set_style(div5, "padding-bottom", "80px");
-  			add_location(div5, file$1, 473, 0, 14926);
+  			add_location(div5, file$1, 561, 0, 17588);
   		},
   		l: function claim(nodes) {
   			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
@@ -4969,182 +5118,144 @@
   			insert_dev(target, t0, anchor);
   			insert_dev(target, div0, anchor);
   			append_dev(div0, input0);
-  			set_input_value(input0, /*querie*/ ctx[7]);
+  			set_input_value(input0, /*querie*/ ctx[6]);
   			append_dev(div0, t1);
   			append_dev(div0, button0);
-  			append_dev(div0, t3);
-  			append_dev(div0, button1);
-  			append_dev(div0, t5);
-  			append_dev(div0, a);
-  			insert_dev(target, t7, anchor);
+  			insert_dev(target, t3, anchor);
   			insert_dev(target, div2, anchor);
   			append_dev(div2, label0);
   			append_dev(label0, input1);
-  			input1.checked = /*series_checked*/ ctx[10];
-  			append_dev(label0, t8);
+  			input1.checked = /*series_checked*/ ctx[9];
+  			append_dev(label0, t4);
   			append_dev(label0, span0);
-  			append_dev(div2, t9);
+  			append_dev(div2, t5);
   			append_dev(div2, span1);
-  			append_dev(div2, t11);
+  			append_dev(div2, t7);
   			append_dev(div2, span2);
-  			append_dev(div2, t13);
+  			append_dev(div2, t9);
   			append_dev(div2, label1);
   			append_dev(label1, input2);
-  			input2.checked = /*author_checked*/ ctx[11];
-  			append_dev(label1, t14);
+  			input2.checked = /*author_checked*/ ctx[10];
+  			append_dev(label1, t10);
   			append_dev(label1, span3);
-  			append_dev(div2, t15);
+  			append_dev(div2, t11);
   			append_dev(div2, span4);
-  			append_dev(div2, t17);
+  			append_dev(div2, t13);
   			append_dev(div2, span5);
-  			append_dev(div2, t19);
+  			append_dev(div2, t15);
   			append_dev(div2, label2);
   			append_dev(label2, input3);
-  			input3.checked = /*book_checked*/ ctx[12];
-  			append_dev(label2, t20);
+  			input3.checked = /*book_checked*/ ctx[11];
+  			append_dev(label2, t16);
   			append_dev(label2, span6);
-  			append_dev(div2, t21);
+  			append_dev(div2, t17);
   			append_dev(div2, span7);
-  			append_dev(div2, t23);
+  			append_dev(div2, t19);
   			append_dev(div2, span8);
-  			append_dev(div2, t25);
+  			append_dev(div2, t21);
   			append_dev(div2, div1);
-  			append_dev(div1, button2);
-  			append_dev(button2, t26);
-  			append_dev(div1, t27);
+  			append_dev(div1, button1);
+  			append_dev(button1, t22);
+  			append_dev(div1, t23);
   			append_dev(div1, p);
-  			append_dev(p, t28);
-  			append_dev(p, t29);
-  			append_dev(p, t30);
-  			append_dev(p, t31);
-  			append_dev(div1, t32);
-  			append_dev(div1, button3);
-  			append_dev(button3, t33);
-  			insert_dev(target, t34, anchor);
+  			append_dev(p, t24);
+  			append_dev(p, t25);
+  			append_dev(p, t26);
+  			append_dev(p, t27);
+  			append_dev(div1, t28);
+  			append_dev(div1, button2);
+  			append_dev(button2, t29);
+  			insert_dev(target, t30, anchor);
   			insert_dev(target, div3, anchor);
   			append_dev(div3, img);
-  			insert_dev(target, t35, anchor);
+  			insert_dev(target, t31, anchor);
   			insert_dev(target, div4, anchor);
 
   			for (let i = 0; i < each_blocks.length; i += 1) {
   				each_blocks[i].m(div4, null);
   			}
 
-  			insert_dev(target, t36, anchor);
+  			insert_dev(target, t32, anchor);
   			insert_dev(target, div5, anchor);
-  			current = true;
   			if (remount) run_all(dispose);
 
   			dispose = [
-  				listen_dev(window, "keydown", /*handleEnter*/ ctx[25], false, false, false),
-  				listen_dev(window, "click", /*hideDetails*/ ctx[3], false, false, false),
-  				listen_dev(input0, "input", /*input0_input_handler*/ ctx[36]),
+  				listen_dev(window_1, "keydown", /*handleEnter*/ ctx[27], false, false, false),
+  				listen_dev(input0, "input", /*input0_input_handler*/ ctx[40]),
   				listen_dev(button0, "click", /*handleNewSearch*/ ctx[2], false, false, false),
-  				listen_dev(button1, "click", getBlob, false, false, false),
-  				listen_dev(input1, "change", /*input1_change_handler*/ ctx[37]),
-  				listen_dev(input2, "change", /*input2_change_handler*/ ctx[38]),
-  				listen_dev(input3, "change", /*input3_change_handler*/ ctx[39]),
-  				listen_dev(button2, "click", /*click_handler*/ ctx[40], false, false, false),
-  				listen_dev(button3, "click", /*click_handler_1*/ ctx[41], false, false, false)
+  				listen_dev(input1, "change", /*input1_change_handler*/ ctx[41]),
+  				listen_dev(input2, "change", /*input2_change_handler*/ ctx[42]),
+  				listen_dev(input3, "change", /*input3_change_handler*/ ctx[43]),
+  				listen_dev(button1, "click", /*click_handler*/ ctx[44], false, false, false),
+  				listen_dev(button2, "click", /*click_handler_1*/ ctx[45], false, false, false)
   			];
   		},
   		p: function update(ctx, dirty) {
-  			if (dirty[0] & /*querie*/ 128) {
-  				set_input_value(input0, /*querie*/ ctx[7]);
+  			if (dirty[0] & /*querie*/ 64) {
+  				set_input_value(input0, /*querie*/ ctx[6]);
   			}
 
-  			if (dirty[0] & /*series_checked*/ 1024) {
-  				input1.checked = /*series_checked*/ ctx[10];
+  			if (dirty[0] & /*series_checked*/ 512) {
+  				input1.checked = /*series_checked*/ ctx[9];
   			}
 
-  			if (dirty[0] & /*author_checked*/ 2048) {
-  				input2.checked = /*author_checked*/ ctx[11];
+  			if (dirty[0] & /*author_checked*/ 1024) {
+  				input2.checked = /*author_checked*/ ctx[10];
   			}
 
-  			if (dirty[0] & /*book_checked*/ 4096) {
-  				input3.checked = /*book_checked*/ ctx[12];
+  			if (dirty[0] & /*book_checked*/ 2048) {
+  				input3.checked = /*book_checked*/ ctx[11];
   			}
 
-  			if (!current || dirty[0] & /*prev_button*/ 16384 && button2_class_value !== (button2_class_value = "" + (null_to_empty(/*prev_button*/ ctx[14]) + " svelte-yq10dq"))) {
-  				attr_dev(button2, "class", button2_class_value);
+  			if (dirty[0] & /*prev_button*/ 8192 && button1_class_value !== (button1_class_value = "" + (null_to_empty(/*prev_button*/ ctx[13]) + " svelte-yq10dq"))) {
+  				attr_dev(button1, "class", button1_class_value);
   			}
 
-  			if ((!current || dirty[0] & /*page_number*/ 256) && t29_value !== (t29_value = /*page_number*/ ctx[8] + 1 + "")) set_data_dev(t29, t29_value);
-  			if (!current || dirty[0] & /*pages_total*/ 8192) set_data_dev(t31, /*pages_total*/ ctx[13]);
+  			if (dirty[0] & /*page_number*/ 128 && t25_value !== (t25_value = /*page_number*/ ctx[7] + 1 + "")) set_data_dev(t25, t25_value);
+  			if (dirty[0] & /*pages_total*/ 4096) set_data_dev(t27, /*pages_total*/ ctx[12]);
 
-  			if (!current || dirty[0] & /*is_pages*/ 65536 && p_class_value !== (p_class_value = "" + (null_to_empty(/*is_pages*/ ctx[16]) + " svelte-yq10dq"))) {
+  			if (dirty[0] & /*is_pages*/ 32768 && p_class_value !== (p_class_value = "" + (null_to_empty(/*is_pages*/ ctx[15]) + " svelte-yq10dq"))) {
   				attr_dev(p, "class", p_class_value);
   			}
 
-  			if (!current || dirty[0] & /*next_button*/ 32768 && button3_class_value !== (button3_class_value = "" + (null_to_empty(/*next_button*/ ctx[15]) + " svelte-yq10dq"))) {
-  				attr_dev(button3, "class", button3_class_value);
+  			if (dirty[0] & /*next_button*/ 16384 && button2_class_value !== (button2_class_value = "" + (null_to_empty(/*next_button*/ ctx[14]) + " svelte-yq10dq"))) {
+  				attr_dev(button2, "class", button2_class_value);
   			}
 
-  			if (!current || dirty[0] & /*loading*/ 131072 && div3_class_value !== (div3_class_value = "" + (null_to_empty(/*loading*/ ctx[17]) + " svelte-yq10dq"))) {
+  			if (dirty[0] & /*loading*/ 65536 && div3_class_value !== (div3_class_value = "" + (null_to_empty(/*loading*/ ctx[16]) + " svelte-yq10dq"))) {
   				attr_dev(div3, "class", div3_class_value);
   			}
 
-  			if (dirty[0] & /*results, showDetails, details_text, show_details, download_links, show_download_options, showDownloadOptions, book_menu, showBookMenu*/ 16253552) {
-  				each_value = /*results*/ ctx[9];
+  			if (dirty[0] & /*results, showDetails, details_text, loading_details, show_details, download_links, show_download_options, showDownloadOptions, book_added, loading_to_library, getBlob, book_menu, showBookMenu*/ 65929530) {
+  				const each_value = /*results*/ ctx[8];
   				validate_each_argument(each_value);
-  				let i;
-
-  				for (i = 0; i < each_value.length; i += 1) {
-  					const child_ctx = get_each_context(ctx, each_value, i);
-
-  					if (each_blocks[i]) {
-  						each_blocks[i].p(child_ctx, dirty);
-  						transition_in(each_blocks[i], 1);
-  					} else {
-  						each_blocks[i] = create_each_block(child_ctx);
-  						each_blocks[i].c();
-  						transition_in(each_blocks[i], 1);
-  						each_blocks[i].m(div4, null);
-  					}
-  				}
-
-  				group_outros();
-
-  				for (i = each_value.length; i < each_blocks.length; i += 1) {
-  					out(i);
-  				}
-
-  				check_outros();
+  				for (let i = 0; i < each_blocks.length; i += 1) each_blocks[i].r();
+  				validate_each_keys(ctx, each_value, get_each_context, get_key);
+  				each_blocks = update_keyed_each(each_blocks, dirty, get_key, 1, ctx, each_value, each_1_lookup, div4, fix_and_destroy_block, create_each_block, null, get_each_context);
+  				for (let i = 0; i < each_blocks.length; i += 1) each_blocks[i].a();
   			}
 
-  			if (!current || dirty[0] & /*results_css*/ 262144 && div4_class_value !== (div4_class_value = "" + (null_to_empty(/*results_css*/ ctx[18]) + " svelte-yq10dq"))) {
+  			if (dirty[0] & /*results_css*/ 1048576 && div4_class_value !== (div4_class_value = "" + (null_to_empty(/*results_css*/ ctx[20]) + " svelte-yq10dq"))) {
   				attr_dev(div4, "class", div4_class_value);
   			}
   		},
-  		i: function intro(local) {
-  			if (current) return;
-
-  			for (let i = 0; i < each_value.length; i += 1) {
-  				transition_in(each_blocks[i]);
-  			}
-
-  			current = true;
-  		},
-  		o: function outro(local) {
-  			each_blocks = each_blocks.filter(Boolean);
-
-  			for (let i = 0; i < each_blocks.length; i += 1) {
-  				transition_out(each_blocks[i]);
-  			}
-
-  			current = false;
-  		},
+  		i: noop,
+  		o: noop,
   		d: function destroy(detaching) {
   			if (detaching) detach_dev(t0);
   			if (detaching) detach_dev(div0);
-  			if (detaching) detach_dev(t7);
+  			if (detaching) detach_dev(t3);
   			if (detaching) detach_dev(div2);
-  			if (detaching) detach_dev(t34);
+  			if (detaching) detach_dev(t30);
   			if (detaching) detach_dev(div3);
-  			if (detaching) detach_dev(t35);
+  			if (detaching) detach_dev(t31);
   			if (detaching) detach_dev(div4);
-  			destroy_each(each_blocks, detaching);
-  			if (detaching) detach_dev(t36);
+
+  			for (let i = 0; i < each_blocks.length; i += 1) {
+  				each_blocks[i].d();
+  			}
+
+  			if (detaching) detach_dev(t32);
   			if (detaching) detach_dev(div5);
   			run_all(dispose);
   		}
@@ -5161,20 +5272,6 @@
   	return block;
   }
 
-  function getBlob() {
-  	// "http://flibusta.is/b/236755/fb2"
-  	// "http://static.flibusta.is:443/b.fb2/Sever_Stalin-protiv-vyrodkov-Arbata-.M0SIqg.236755.fb2.zip"
-  	// window.Blob("http://flibusta.is/b/236755/fb2");
-  	fetch("http://flibusta.is/b/236755/fb2", {
-  		mode: "no-cors",
-  		headers: { "Content-Type": "application/zip" }
-  	}).then(response => console.log(response)).catch(err => console.log(err));
-  }
-
-  function getBlob2() {
-  	
-  } // download("data:http://flibusta.is/b/236755/fb2", "book.fb2.zip", "application/zip")
-
   function instance$1($$self, $$props, $$invalidate) {
   	let querie = null;
   	let page_number = 0;
@@ -5189,11 +5286,14 @@
   	let is_pages = "Hidden";
   	let loading = "Hidden";
   	let loading_details = "Hidden";
+  	let loading_to_library = [];
+  	let book_added = [];
   	let results_css = "Hidden";
   	let book_menu = [];
   	let details = [];
   	let details_text = "";
   	let show_details = [];
+  	let show_details_bak = [];
   	let allbooks = [];
   	let show_details_btn = null;
   	let show_details_img = null;
@@ -5213,34 +5313,118 @@
   	beforeUpdate(() => {
   		show_details_btn = document.getElementById("show_details_btn");
   		show_details_img = document.getElementById("show_details_img");
-  		$$invalidate(14, prev_button = "Hidden");
+  		$$invalidate(13, prev_button = "Hidden");
 
   		if (page_number > 0) {
-  			$$invalidate(14, prev_button = "focus:outline-none bg-mainbtn m-2 static rounded-lg py-2 px-4");
+  			$$invalidate(13, prev_button = "focus:outline-none bg-mainbtn m-2 static rounded-lg py-2 px-4");
   		}
 
-  		$$invalidate(15, next_button = "focus:outline-none bg-mainbtn m-2 static rounded-lg py-2 px-4");
+  		$$invalidate(14, next_button = "focus:outline-none bg-mainbtn m-2 static rounded-lg py-2 px-4");
 
   		if (page_number >= pages_total - 1) {
-  			$$invalidate(15, next_button = "Hidden");
+  			$$invalidate(14, next_button = "Hidden");
   		}
 
-  		$$invalidate(16, is_pages = "Hidden");
+  		$$invalidate(15, is_pages = "Hidden");
 
   		if (pages_total !== 0) {
-  			$$invalidate(16, is_pages = "focus:outline-none bg-mainbtn m-2 static rounded-lg py-2 px-4");
+  			$$invalidate(15, is_pages = "focus:outline-none bg-mainbtn m-2 static rounded-lg py-2 px-4");
   		}
   	}); // determine whether we should auto-scroll
   	// once the DOM is updated...
 
   	function changePageNumber(arg) {
-  		$$invalidate(8, page_number += arg);
+  		$$invalidate(7, page_number += arg);
   		handleSearch();
   	}
 
+  	function getBlob(book_url, book_name, index) {
+  		$$invalidate(18, loading_to_library[index] = true, loading_to_library);
+
+  		axios$1({
+  			url: "https://krakenflask.herokuapp.com/download/" + book_url, //your url
+  			method: "GET",
+  			responseType: "blob", // important
+  			
+  		}).then(response => {
+  			const book = response.data;
+  			addBookToDB(book, book_name, index);
+  		});
+  	}
+
+  	function addBookToDB(book, book_name, index) {
+  		var db;
+
+  		//check for support
+  		if (!("indexedDB" in window)) {
+  			console.log("This browser doesn't support IndexedDB");
+  			return;
+  		}
+
+  		// var idb = window.indexedDB
+  		var db_books = indexedDB.open("books_db", 1);
+
+  		db_books.onupgradeneeded = function (e) {
+  			var db = e.target.result;
+
+  			if (!db.objectStoreNames.contains("books_store")) {
+  				var books_store = db.createObjectStore("books_store", { autoIncrement: true });
+  			}
+
+  			if (!db.objectStoreNames.contains("book_names")) {
+  				var books_store = db.createObjectStore("book_names", { autoIncrement: true });
+  			}
+  		};
+
+  		db_books.onsuccess = function (e) {
+  			db = e.target.result;
+  			addBook();
+  			addBookTitle();
+  		};
+
+  		db_books.onerror = function (e) {
+  			console.log("onerror!");
+  			console.dir(e);
+  		};
+
+  		function addBook() {
+  			var transaction = db.transaction(["books_store"], "readwrite");
+  			var store = transaction.objectStore("books_store");
+  			var request = store.add(book);
+
+  			request.onerror = function (e) {
+  				console.log("Error", e.target.error.name);
+  			};
+
+  			request.onsuccess = function (e) {
+  				
+  			};
+  		}
+
+  		function addBookTitle() {
+  			var transaction = db.transaction(["book_names"], "readwrite");
+  			var store = transaction.objectStore("book_names");
+  			var request = store.add(book_name);
+
+  			request.onerror = function (e) {
+  				console.log("Error", e.target.error.name);
+  			};
+
+  			request.onsuccess = function (e) {
+  				$$invalidate(18, loading_to_library[index] = false, loading_to_library);
+  				$$invalidate(19, book_added[index] = true, book_added);
+  				setTimeout(() => hideAdded(index), 2000);
+  			};
+  		}
+  	}
+
+  	function hideAdded(index) {
+  		$$invalidate(19, book_added[index] = false, book_added);
+  	}
+
   	function handleSearch() {
-  		$$invalidate(18, results_css = "Hidden");
-  		$$invalidate(17, loading = null);
+  		$$invalidate(20, results_css = "Hidden");
+  		$$invalidate(16, loading = null);
   		let pre_querie = querie.replace(/ /g, "+");
 
   		if (series_checked) {
@@ -5259,25 +5443,25 @@
   			const search_querie = "https://flibustasearch.herokuapp.com/http://flibusta.is/booksearch?page=" + page_number + "&ask=" + pre_querie;
 
   			axios$1.get(search_querie).then(response => {
-  				$$invalidate(24, result = response.data);
+  				$$invalidate(26, result = response.data);
   				refineResult();
   			}); // this.setState({ result: response.data }, () => this.refineResult());
   		}
   	} // pre_querie = pre_querie + "&chb=on";
 
   	function handleNewSearch() {
-  		$$invalidate(8, page_number = 0);
+  		$$invalidate(7, page_number = 0);
   		handleSearch();
   	}
 
   	function hideDetails(event) {
-  		if (event.target !== show_details_btn && event.target !== show_details_img) {
-  			$$invalidate(21, show_details = []);
-  		}
+  		$$invalidate(23, show_details = show_details_bak);
   	}
 
   	function showDetails(index) {
-  		$$invalidate(21, show_details[index] = !show_details[index], show_details);
+  		$$invalidate(22, details_text = "");
+  		$$invalidate(17, loading_details = null);
+  		$$invalidate(23, show_details[index] = !show_details[index], show_details);
   		let pre_details_link = dist_3(allbooks[index]).firstChild.firstChild.rawAttrs;
   		pre_details_link = pre_details_link.substr(6);
   		let details_link = pre_details_link.slice(0, -1);
@@ -5291,11 +5475,11 @@
   	}
 
   	function showDownloadOptions(index) {
-  		$$invalidate(22, show_download_options[index] = !show_download_options[index], show_download_options);
+  		$$invalidate(24, show_download_options[index] = !show_download_options[index], show_download_options);
   		let download_link = dist_3(allbooks[index]).firstChild.firstChild.rawAttrs.substr(6).slice(0, -1);
 
   		$$invalidate(
-  			23,
+  			25,
   			download_links[index] = {
   				fb2: download_link + "/fb2",
   				epub: download_link + "/epub",
@@ -5310,11 +5494,10 @@
   		const link = document.createElement("a");
   		link.href = download_link;
   		link.click();
-  		console.log(download_link);
   	}
 
   	function refineDetails(details) {
-  		loading_details = "Hidden";
+  		$$invalidate(17, loading_details = "Hidden");
   		const details0 = String(details);
   		const result1 = details0.substring(details0.indexOf("<h1 class=\"title\">"));
   		const result2 = result1.substring(0, result1.indexOf("<hr/><div id='newann'"));
@@ -5326,19 +5509,18 @@
   		const result5 = result3.replace(/<[a-zA-Z]+(\s+[a-zA-Z]+\s*=\s*("([^"]*)"|'([^']*)'))*\s*\/>/, "");
   		const position = result5.indexOf("<img src=\"") + 10;
   		const result6 = [result5.slice(0, position), url, result5.slice(position)].join("");
-  		$$invalidate(20, details_text = result6);
-  		console.log(details_text);
+  		$$invalidate(22, details_text = result6);
   	}
 
   	function refineResult() {
-  		$$invalidate(17, loading = "Hidden");
+  		$$invalidate(16, loading = "Hidden");
   		const result0 = String(result);
   		const result1 = result0.substring(result.indexOf("<h1 class=\"title\">Поиск книг</h1>") + 0);
   		const result2 = result1.substring(0, result1.indexOf("<div id=\"sidebar-right\" class=\"sidebar\">"));
   		const array1 = result2.split("\n");
   		const array2 = array1.filter(String);
 
-  		$$invalidate(13, pages_total = array2.filter(elem => {
+  		$$invalidate(12, pages_total = array2.filter(elem => {
   			if (elem.includes("class=\"pager\"") || elem.includes("<li class=\"pager-item\"")) {
   				return true;
   			}
@@ -5372,7 +5554,7 @@
   		const array5 = array3.map((elem, index) => {
   			if (elem.includes("<ul>")) {
   				elem = elem.substr(elem.indexOf("<ul>") + 4);
-  			} // console.log('found!')
+  			}
 
   			elem = elem.replace(/<span style="background-color: #FFFCBB">/g, "");
   			elem = elem.replace(/<\/span>/g, "");
@@ -5398,15 +5580,27 @@
   			return elem.structuredText;
   		});
 
-  		$$invalidate(19, book_menu = array5.map(() => {
+  		$$invalidate(21, book_menu = array5.map(() => {
   			return null;
   		}));
 
-  		$$invalidate(21, show_details = array5.map(() => {
+  		$$invalidate(18, loading_to_library = array5.map(() => {
   			return null;
   		}));
 
-  		$$invalidate(22, show_download_options = array5.map(() => {
+  		$$invalidate(19, book_added = array5.map(() => {
+  			return null;
+  		}));
+
+  		$$invalidate(23, show_details = array5.map(() => {
+  			return null;
+  		}));
+
+  		show_details_bak = array5.map(() => {
+  			return null;
+  		});
+
+  		$$invalidate(24, show_download_options = array5.map(() => {
   			return null;
   		}));
 
@@ -5418,19 +5612,29 @@
   			return elem;
   		});
 
-  		// console.log('array6 is', array6);
   		// result = parse(array5)
-  		$$invalidate(9, results = array6);
+  		$$invalidate(8, results = array6);
 
-  		$$invalidate(18, results_css = "text-maintxt m-2");
+  		$$invalidate(20, results_css = "text-maintxt m-2");
 
   		// this.setState({ result2: array6, pagesTotal: pagesTotal.length / 2 });
   		// result2 = array6
-  		$$invalidate(13, pages_total = pages_total.length / 2);
+  		$$invalidate(12, pages_total = pages_total.length / 2);
   	}
 
   	function showBookMenu(index) {
-  		$$invalidate(19, book_menu[index] = !book_menu[index], book_menu);
+  		$$invalidate(21, book_menu[index] = !book_menu[index], book_menu);
+  		let download_link = dist_3(allbooks[index]).firstChild.firstChild.rawAttrs.substr(6).slice(0, -1);
+
+  		$$invalidate(
+  			25,
+  			download_links[index] = {
+  				fb2: download_link + "/fb2",
+  				epub: download_link + "/epub",
+  				mobi: download_link + "/mobi"
+  			},
+  			download_links
+  		);
   	}
 
   	const writable_props = [];
@@ -5444,41 +5648,43 @@
 
   	function input0_input_handler() {
   		querie = this.value;
-  		$$invalidate(7, querie);
+  		$$invalidate(6, querie);
   	}
 
   	function input1_change_handler() {
   		series_checked = this.checked;
-  		$$invalidate(10, series_checked);
+  		$$invalidate(9, series_checked);
   	}
 
   	function input2_change_handler() {
   		author_checked = this.checked;
-  		$$invalidate(11, author_checked);
+  		$$invalidate(10, author_checked);
   	}
 
   	function input3_change_handler() {
   		book_checked = this.checked;
-  		$$invalidate(12, book_checked);
+  		$$invalidate(11, book_checked);
   	}
 
   	const click_handler = () => changePageNumber(-1);
   	const click_handler_1 = () => changePageNumber(1);
   	const click_handler_2 = index => showBookMenu(index);
   	const click_handler_3 = index => showDetails(index);
-  	const click_handler_4 = index => showDetails(index);
+  	const click_handler_4 = (index, result) => getBlob(download_links[index].fb2, result, index);
   	const click_handler_5 = index => showDownloadOptions(index);
   	const click_handler_6 = index => showDetails(index);
   	const click_handler_7 = index => showDetails(index);
 
   	$$self.$capture_state = () => ({
   		axios: axios$1,
+  		flip,
   		parse: dist_3,
   		beforeUpdate,
   		afterUpdate,
   		onMount,
   		fly,
   		saveAs: FileSaver_min_1,
+  		FileDownload: fileDownload,
   		querie,
   		page_number,
   		result,
@@ -5492,11 +5698,14 @@
   		is_pages,
   		loading,
   		loading_details,
+  		loading_to_library,
+  		book_added,
   		results_css,
   		book_menu,
   		details,
   		details_text,
   		show_details,
+  		show_details_bak,
   		allbooks,
   		show_details_btn,
   		show_details_img,
@@ -5505,7 +5714,8 @@
   		handleEnter,
   		changePageNumber,
   		getBlob,
-  		getBlob2,
+  		addBookToDB,
+  		hideAdded,
   		handleSearch,
   		handleNewSearch,
   		hideDetails,
@@ -5518,29 +5728,32 @@
   	});
 
   	$$self.$inject_state = $$props => {
-  		if ("querie" in $$props) $$invalidate(7, querie = $$props.querie);
-  		if ("page_number" in $$props) $$invalidate(8, page_number = $$props.page_number);
-  		if ("result" in $$props) $$invalidate(24, result = $$props.result);
-  		if ("results" in $$props) $$invalidate(9, results = $$props.results);
-  		if ("series_checked" in $$props) $$invalidate(10, series_checked = $$props.series_checked);
-  		if ("author_checked" in $$props) $$invalidate(11, author_checked = $$props.author_checked);
-  		if ("book_checked" in $$props) $$invalidate(12, book_checked = $$props.book_checked);
-  		if ("pages_total" in $$props) $$invalidate(13, pages_total = $$props.pages_total);
-  		if ("prev_button" in $$props) $$invalidate(14, prev_button = $$props.prev_button);
-  		if ("next_button" in $$props) $$invalidate(15, next_button = $$props.next_button);
-  		if ("is_pages" in $$props) $$invalidate(16, is_pages = $$props.is_pages);
-  		if ("loading" in $$props) $$invalidate(17, loading = $$props.loading);
-  		if ("loading_details" in $$props) loading_details = $$props.loading_details;
-  		if ("results_css" in $$props) $$invalidate(18, results_css = $$props.results_css);
-  		if ("book_menu" in $$props) $$invalidate(19, book_menu = $$props.book_menu);
+  		if ("querie" in $$props) $$invalidate(6, querie = $$props.querie);
+  		if ("page_number" in $$props) $$invalidate(7, page_number = $$props.page_number);
+  		if ("result" in $$props) $$invalidate(26, result = $$props.result);
+  		if ("results" in $$props) $$invalidate(8, results = $$props.results);
+  		if ("series_checked" in $$props) $$invalidate(9, series_checked = $$props.series_checked);
+  		if ("author_checked" in $$props) $$invalidate(10, author_checked = $$props.author_checked);
+  		if ("book_checked" in $$props) $$invalidate(11, book_checked = $$props.book_checked);
+  		if ("pages_total" in $$props) $$invalidate(12, pages_total = $$props.pages_total);
+  		if ("prev_button" in $$props) $$invalidate(13, prev_button = $$props.prev_button);
+  		if ("next_button" in $$props) $$invalidate(14, next_button = $$props.next_button);
+  		if ("is_pages" in $$props) $$invalidate(15, is_pages = $$props.is_pages);
+  		if ("loading" in $$props) $$invalidate(16, loading = $$props.loading);
+  		if ("loading_details" in $$props) $$invalidate(17, loading_details = $$props.loading_details);
+  		if ("loading_to_library" in $$props) $$invalidate(18, loading_to_library = $$props.loading_to_library);
+  		if ("book_added" in $$props) $$invalidate(19, book_added = $$props.book_added);
+  		if ("results_css" in $$props) $$invalidate(20, results_css = $$props.results_css);
+  		if ("book_menu" in $$props) $$invalidate(21, book_menu = $$props.book_menu);
   		if ("details" in $$props) details = $$props.details;
-  		if ("details_text" in $$props) $$invalidate(20, details_text = $$props.details_text);
-  		if ("show_details" in $$props) $$invalidate(21, show_details = $$props.show_details);
+  		if ("details_text" in $$props) $$invalidate(22, details_text = $$props.details_text);
+  		if ("show_details" in $$props) $$invalidate(23, show_details = $$props.show_details);
+  		if ("show_details_bak" in $$props) show_details_bak = $$props.show_details_bak;
   		if ("allbooks" in $$props) allbooks = $$props.allbooks;
   		if ("show_details_btn" in $$props) show_details_btn = $$props.show_details_btn;
   		if ("show_details_img" in $$props) show_details_img = $$props.show_details_img;
-  		if ("show_download_options" in $$props) $$invalidate(22, show_download_options = $$props.show_download_options);
-  		if ("download_links" in $$props) $$invalidate(23, download_links = $$props.download_links);
+  		if ("show_download_options" in $$props) $$invalidate(24, show_download_options = $$props.show_download_options);
+  		if ("download_links" in $$props) $$invalidate(25, download_links = $$props.download_links);
   	};
 
   	if ($$props && "$$inject" in $$props) {
@@ -5551,7 +5764,6 @@
   		changePageNumber,
   		getBlob,
   		handleNewSearch,
-  		hideDetails,
   		showDetails,
   		showDownloadOptions,
   		showBookMenu,
@@ -5566,6 +5778,9 @@
   		next_button,
   		is_pages,
   		loading,
+  		loading_details,
+  		loading_to_library,
+  		book_added,
   		results_css,
   		book_menu,
   		details_text,
@@ -5574,13 +5789,15 @@
   		download_links,
   		result,
   		handleEnter,
-  		getBlob2,
+  		addBookToDB,
+  		hideAdded,
   		handleSearch,
+  		hideDetails,
   		downloadBook,
   		refineDetails,
   		refineResult,
-  		loading_details,
   		details,
+  		show_details_bak,
   		allbooks,
   		show_details_btn,
   		show_details_img,
@@ -5612,16 +5829,17 @@
   			{
   				changePageNumber: 0,
   				getBlob: 1,
-  				getBlob2: 26,
-  				handleSearch: 27,
+  				addBookToDB: 28,
+  				hideAdded: 29,
+  				handleSearch: 30,
   				handleNewSearch: 2,
-  				hideDetails: 3,
-  				showDetails: 4,
-  				showDownloadOptions: 5,
-  				downloadBook: 28,
-  				refineDetails: 29,
-  				refineResult: 30,
-  				showBookMenu: 6
+  				hideDetails: 31,
+  				showDetails: 3,
+  				showDownloadOptions: 4,
+  				downloadBook: 32,
+  				refineDetails: 33,
+  				refineResult: 34,
+  				showBookMenu: 5
   			},
   			[-1, -1]
   		);
@@ -5643,23 +5861,31 @@
   	}
 
   	get getBlob() {
-  		return getBlob;
+  		return this.$$.ctx[1];
   	}
 
   	set getBlob(value) {
   		throw new Error("<Search>: Props cannot be set directly on the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
   	}
 
-  	get getBlob2() {
-  		return getBlob2;
+  	get addBookToDB() {
+  		return this.$$.ctx[28];
   	}
 
-  	set getBlob2(value) {
+  	set addBookToDB(value) {
+  		throw new Error("<Search>: Props cannot be set directly on the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
+  	}
+
+  	get hideAdded() {
+  		return this.$$.ctx[29];
+  	}
+
+  	set hideAdded(value) {
   		throw new Error("<Search>: Props cannot be set directly on the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
   	}
 
   	get handleSearch() {
-  		return this.$$.ctx[27];
+  		return this.$$.ctx[30];
   	}
 
   	set handleSearch(value) {
@@ -5675,7 +5901,7 @@
   	}
 
   	get hideDetails() {
-  		return this.$$.ctx[3];
+  		return this.$$.ctx[31];
   	}
 
   	set hideDetails(value) {
@@ -5683,7 +5909,7 @@
   	}
 
   	get showDetails() {
-  		return this.$$.ctx[4];
+  		return this.$$.ctx[3];
   	}
 
   	set showDetails(value) {
@@ -5691,7 +5917,7 @@
   	}
 
   	get showDownloadOptions() {
-  		return this.$$.ctx[5];
+  		return this.$$.ctx[4];
   	}
 
   	set showDownloadOptions(value) {
@@ -5699,7 +5925,7 @@
   	}
 
   	get downloadBook() {
-  		return this.$$.ctx[28];
+  		return this.$$.ctx[32];
   	}
 
   	set downloadBook(value) {
@@ -5707,7 +5933,7 @@
   	}
 
   	get refineDetails() {
-  		return this.$$.ctx[29];
+  		return this.$$.ctx[33];
   	}
 
   	set refineDetails(value) {
@@ -5715,7 +5941,7 @@
   	}
 
   	get refineResult() {
-  		return this.$$.ctx[30];
+  		return this.$$.ctx[34];
   	}
 
   	set refineResult(value) {
@@ -5723,7 +5949,7 @@
   	}
 
   	get showBookMenu() {
-  		return this.$$.ctx[6];
+  		return this.$$.ctx[5];
   	}
 
   	set showBookMenu(value) {
@@ -5733,33 +5959,125 @@
 
   /* src/components/Library.svelte generated by Svelte v3.20.1 */
 
+  const { console: console_1$1 } = globals;
   const file$2 = "src/components/Library.svelte";
 
-  function create_fragment$2(ctx) {
-  	let t0;
+  function get_each_context$1(ctx, list, i) {
+  	const child_ctx = ctx.slice();
+  	child_ctx[1] = list[i];
+  	return child_ctx;
+  }
+
+  // (54:2) {#each book_list as book}
+  function create_each_block$1(ctx) {
   	let div;
+  	let t0_value = /*book*/ ctx[1] + "";
+  	let t0;
+  	let t1;
+  	let hr;
 
   	const block = {
   		c: function create() {
-  			t0 = space();
   			div = element("div");
-  			div.textContent = "library";
+  			t0 = text(t0_value);
+  			t1 = space();
+  			hr = element("hr");
+  			add_location(div, file$2, 54, 4, 1278);
+  			add_location(hr, file$2, 55, 4, 1300);
+  		},
+  		m: function mount(target, anchor) {
+  			insert_dev(target, div, anchor);
+  			append_dev(div, t0);
+  			insert_dev(target, t1, anchor);
+  			insert_dev(target, hr, anchor);
+  		},
+  		p: function update(ctx, dirty) {
+  			if (dirty & /*book_list*/ 1 && t0_value !== (t0_value = /*book*/ ctx[1] + "")) set_data_dev(t0, t0_value);
+  		},
+  		d: function destroy(detaching) {
+  			if (detaching) detach_dev(div);
+  			if (detaching) detach_dev(t1);
+  			if (detaching) detach_dev(hr);
+  		}
+  	};
+
+  	dispatch_dev("SvelteRegisterBlock", {
+  		block,
+  		id: create_each_block$1.name,
+  		type: "each",
+  		source: "(54:2) {#each book_list as book}",
+  		ctx
+  	});
+
+  	return block;
+  }
+
+  function create_fragment$2(ctx) {
+  	let t;
+  	let div;
+  	let each_value = /*book_list*/ ctx[0];
+  	validate_each_argument(each_value);
+  	let each_blocks = [];
+
+  	for (let i = 0; i < each_value.length; i += 1) {
+  		each_blocks[i] = create_each_block$1(get_each_context$1(ctx, each_value, i));
+  	}
+
+  	const block = {
+  		c: function create() {
+  			t = space();
+  			div = element("div");
+
+  			for (let i = 0; i < each_blocks.length; i += 1) {
+  				each_blocks[i].c();
+  			}
+
   			document.title = "library";
-  			add_location(div, file$2, 11, 0, 153);
+  			attr_dev(div, "class", "m-2 text-maintxt");
+  			add_location(div, file$2, 47, 0, 1068);
   		},
   		l: function claim(nodes) {
   			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
   		},
   		m: function mount(target, anchor) {
-  			insert_dev(target, t0, anchor);
+  			insert_dev(target, t, anchor);
   			insert_dev(target, div, anchor);
+
+  			for (let i = 0; i < each_blocks.length; i += 1) {
+  				each_blocks[i].m(div, null);
+  			}
   		},
-  		p: noop,
+  		p: function update(ctx, [dirty]) {
+  			if (dirty & /*book_list*/ 1) {
+  				each_value = /*book_list*/ ctx[0];
+  				validate_each_argument(each_value);
+  				let i;
+
+  				for (i = 0; i < each_value.length; i += 1) {
+  					const child_ctx = get_each_context$1(ctx, each_value, i);
+
+  					if (each_blocks[i]) {
+  						each_blocks[i].p(child_ctx, dirty);
+  					} else {
+  						each_blocks[i] = create_each_block$1(child_ctx);
+  						each_blocks[i].c();
+  						each_blocks[i].m(div, null);
+  					}
+  				}
+
+  				for (; i < each_blocks.length; i += 1) {
+  					each_blocks[i].d(1);
+  				}
+
+  				each_blocks.length = each_value.length;
+  			}
+  		},
   		i: noop,
   		o: noop,
   		d: function destroy(detaching) {
-  			if (detaching) detach_dev(t0);
+  			if (detaching) detach_dev(t);
   			if (detaching) detach_dev(div);
+  			destroy_each(each_blocks, detaching);
   		}
   	};
 
@@ -5774,16 +6092,71 @@
   	return block;
   }
 
-  function instance$2($$self, $$props) {
+  function instance$2($$self, $$props, $$invalidate) {
+  	let book_list = [];
+
+  	onMount(() => {
+  		var db;
+
+  		//check for support
+  		if (!("indexedDB" in window)) {
+  			console.log("This browser doesn't support IndexedDB");
+  			return;
+  		}
+
+  		// var idb = window.indexedDB
+  		var db_books = indexedDB.open("books_db", 1);
+
+  		db_books.onsuccess = function (e) {
+  			db = e.target.result;
+  			getBooks();
+  		};
+
+  		db_books.onerror = function (e) {
+  			console.log("onerror!");
+  			console.dir(e);
+  		};
+
+  		function getBooks() {
+  			var transaction = db.transaction(["book_names"], "readonly");
+  			var store = transaction.objectStore("book_names");
+  			var request = store.getAll();
+
+  			request.onerror = function (e) {
+  				console.log("Error", e.target.error.name);
+  			};
+
+  			request.onsuccess = function (e) {
+  				$$invalidate(0, book_list = e.target.result);
+  			};
+  		}
+  	});
+
   	const writable_props = [];
 
   	Object.keys($$props).forEach(key => {
-  		if (!~writable_props.indexOf(key) && key.slice(0, 2) !== "$$") console.warn(`<Library> was created with unknown prop '${key}'`);
+  		if (!~writable_props.indexOf(key) && key.slice(0, 2) !== "$$") console_1$1.warn(`<Library> was created with unknown prop '${key}'`);
   	});
 
   	let { $$slots = {}, $$scope } = $$props;
   	validate_slots("Library", $$slots, []);
-  	return [];
+
+  	$$self.$capture_state = () => ({
+  		beforeUpdate,
+  		afterUpdate,
+  		onMount,
+  		book_list
+  	});
+
+  	$$self.$inject_state = $$props => {
+  		if ("book_list" in $$props) $$invalidate(0, book_list = $$props.book_list);
+  	};
+
+  	if ($$props && "$$inject" in $$props) {
+  		$$self.$inject_state($$props.$$inject);
+  	}
+
+  	return [book_list];
   }
 
   class Library extends SvelteComponentDev {
@@ -7321,7 +7694,7 @@
   const file$5 = "src/App.svelte";
 
   // (26:4) <Link to="/">
-  function create_default_slot_4(ctx) {
+  function create_default_slot_6(ctx) {
   	let img;
   	let img_src_value;
 
@@ -7343,7 +7716,7 @@
 
   	dispatch_dev("SvelteRegisterBlock", {
   		block,
-  		id: create_default_slot_4.name,
+  		id: create_default_slot_6.name,
   		type: "slot",
   		source: "(26:4) <Link to=\\\"/\\\">",
   		ctx
@@ -7353,7 +7726,7 @@
   }
 
   // (29:4) <Link to="library">
-  function create_default_slot_3(ctx) {
+  function create_default_slot_5(ctx) {
   	let img;
   	let img_src_value;
 
@@ -7375,7 +7748,7 @@
 
   	dispatch_dev("SvelteRegisterBlock", {
   		block,
-  		id: create_default_slot_3.name,
+  		id: create_default_slot_5.name,
   		type: "slot",
   		source: "(29:4) <Link to=\\\"library\\\">",
   		ctx
@@ -7385,7 +7758,7 @@
   }
 
   // (32:4) <Link to="settings">
-  function create_default_slot_2(ctx) {
+  function create_default_slot_4(ctx) {
   	let img;
   	let img_src_value;
 
@@ -7407,7 +7780,7 @@
 
   	dispatch_dev("SvelteRegisterBlock", {
   		block,
-  		id: create_default_slot_2.name,
+  		id: create_default_slot_4.name,
   		type: "slot",
   		source: "(32:4) <Link to=\\\"settings\\\">",
   		ctx
@@ -7416,7 +7789,83 @@
   	return block;
   }
 
-  // (43:4) <Route path="/">
+  // (41:4) <Route exact path="library">
+  function create_default_slot_3(ctx) {
+  	let current;
+  	const library = new Library({ $$inline: true });
+
+  	const block = {
+  		c: function create() {
+  			create_component(library.$$.fragment);
+  		},
+  		m: function mount(target, anchor) {
+  			mount_component(library, target, anchor);
+  			current = true;
+  		},
+  		i: function intro(local) {
+  			if (current) return;
+  			transition_in(library.$$.fragment, local);
+  			current = true;
+  		},
+  		o: function outro(local) {
+  			transition_out(library.$$.fragment, local);
+  			current = false;
+  		},
+  		d: function destroy(detaching) {
+  			destroy_component(library, detaching);
+  		}
+  	};
+
+  	dispatch_dev("SvelteRegisterBlock", {
+  		block,
+  		id: create_default_slot_3.name,
+  		type: "slot",
+  		source: "(41:4) <Route exact path=\\\"library\\\">",
+  		ctx
+  	});
+
+  	return block;
+  }
+
+  // (44:4) <Route exact path="settings">
+  function create_default_slot_2(ctx) {
+  	let current;
+  	const settings = new Settings({ $$inline: true });
+
+  	const block = {
+  		c: function create() {
+  			create_component(settings.$$.fragment);
+  		},
+  		m: function mount(target, anchor) {
+  			mount_component(settings, target, anchor);
+  			current = true;
+  		},
+  		i: function intro(local) {
+  			if (current) return;
+  			transition_in(settings.$$.fragment, local);
+  			current = true;
+  		},
+  		o: function outro(local) {
+  			transition_out(settings.$$.fragment, local);
+  			current = false;
+  		},
+  		d: function destroy(detaching) {
+  			destroy_component(settings, detaching);
+  		}
+  	};
+
+  	dispatch_dev("SvelteRegisterBlock", {
+  		block,
+  		id: create_default_slot_2.name,
+  		type: "slot",
+  		source: "(44:4) <Route exact path=\\\"settings\\\">",
+  		ctx
+  	});
+
+  	return block;
+  }
+
+  // (47:4) <Route exact path="/">
   function create_default_slot_1(ctx) {
   	let current;
   	const search = new Search({ $$inline: true });
@@ -7447,7 +7896,7 @@
   		block,
   		id: create_default_slot_1.name,
   		type: "slot",
-  		source: "(43:4) <Route path=\\\"/\\\">",
+  		source: "(47:4) <Route exact path=\\\"/\\\">",
   		ctx
   	});
 
@@ -7468,7 +7917,7 @@
   	const link0 = new Link({
   			props: {
   				to: "/",
-  				$$slots: { default: [create_default_slot_4] },
+  				$$slots: { default: [create_default_slot_6] },
   				$$scope: { ctx }
   			},
   			$$inline: true
@@ -7477,7 +7926,7 @@
   	const link1 = new Link({
   			props: {
   				to: "library",
-  				$$slots: { default: [create_default_slot_3] },
+  				$$slots: { default: [create_default_slot_5] },
   				$$scope: { ctx }
   			},
   			$$inline: true
@@ -7486,24 +7935,35 @@
   	const link2 = new Link({
   			props: {
   				to: "settings",
-  				$$slots: { default: [create_default_slot_2] },
+  				$$slots: { default: [create_default_slot_4] },
   				$$scope: { ctx }
   			},
   			$$inline: true
   		});
 
   	const route0 = new Route({
-  			props: { path: "library", component: Library },
+  			props: {
+  				exact: true,
+  				path: "library",
+  				$$slots: { default: [create_default_slot_3] },
+  				$$scope: { ctx }
+  			},
   			$$inline: true
   		});
 
   	const route1 = new Route({
-  			props: { path: "settings", component: Settings },
+  			props: {
+  				exact: true,
+  				path: "settings",
+  				$$slots: { default: [create_default_slot_2] },
+  				$$scope: { ctx }
+  			},
   			$$inline: true
   		});
 
   	const route2 = new Route({
   			props: {
+  				exact: true,
   				path: "/",
   				$$slots: { default: [create_default_slot_1] },
   				$$scope: { ctx }
@@ -7568,6 +8028,20 @@
   			}
 
   			link2.$set(link2_changes);
+  			const route0_changes = {};
+
+  			if (dirty & /*$$scope*/ 2) {
+  				route0_changes.$$scope = { dirty, ctx };
+  			}
+
+  			route0.$set(route0_changes);
+  			const route1_changes = {};
+
+  			if (dirty & /*$$scope*/ 2) {
+  				route1_changes.$$scope = { dirty, ctx };
+  			}
+
+  			route1.$set(route1_changes);
   			const route2_changes = {};
 
   			if (dirty & /*$$scope*/ 2) {

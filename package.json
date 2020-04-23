@@ -58,6 +58,7 @@
     "axios": "^0.19.2",
     "downloadjs": "^1.4.7",
     "file-saver": "^2.0.2",
+    "js-file-download": "^0.4.11",
     "node-html-parser": "^1.2.16",
     "svelte-routing": "^1.4.2",
     "svelte-simple-modal": "^0.4.0"
