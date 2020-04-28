@@ -61,6 +61,7 @@
     "js-file-download": "^0.4.11",
     "node-html-parser": "^1.2.16",
     "svelte-routing": "^1.4.2",
-    "svelte-simple-modal": "^0.4.0"
+    "svelte-simple-modal": "^0.4.0",
+    "xml-parse": "^0.4.0"
   }
 }

@@ -44,6 +44,30 @@
     }
   }
 
+  onMount(() => {
+    var db;
+    //check for support
+    if (!("indexedDB" in window)) {
+      console.log("This browser doesn't support IndexedDB");
+      return;
+    }
+    // var idb = window.indexedDB
+    var db_books = indexedDB.open("books_db", 1);
+    db_books.onupgradeneeded = function(e) {
+      var db = e.target.result;
+      if (!db.objectStoreNames.contains("books_store")) {
+        var books_store = db.createObjectStore("books_store", {
+          autoIncrement: true
+        });
+      }
+      if (!db.objectStoreNames.contains("book_names")) {
+        var books_store = db.createObjectStore("book_names", {
+          autoIncrement: true
+        });
+      }
+    };
+  });
+
   beforeUpdate(() => {
     show_details_btn = document.getElementById("show_details_btn");
     show_details_img = document.getElementById("show_details_img");
@@ -76,7 +100,7 @@
   export function getBlob(book_url, book_name, index) {
     loading_to_library[index] = true;
     axios({
-      url: "https://krakenflask.herokuapp.com/download/" + book_url, //your url
+      url: "https://krakenflask.herokuapp.com/html/" + book_url, //your url
       method: "GET",
       responseType: "blob" // important
     }).then(response => {
@@ -127,8 +151,7 @@
       request.onerror = function(e) {
         console.log("Error", e.target.error.name);
       };
-      request.onsuccess = function(e) {
-      };
+      request.onsuccess = function(e) {};
     }
 
     function addBookTitle() {
@@ -245,13 +268,20 @@
       /<[a-zA-Z]+(\s+[a-zA-Z]+\s*=\s*("([^"]*)"|'([^']*)'))*\s*\/>/,
       ""
     );
-    const position = result5.indexOf('<img src="') + 10;
+    const position = result5.indexOf('<img src="/') + 10;
     const result6 = [
       result5.slice(0, position),
       url,
       result5.slice(position)
     ].join("");
-    details_text = result6;
+    const position2 = result6.indexOf('<img src="/') + 10;
+    const result7 = [
+      result6.slice(0, position2),
+      url,
+      result6.slice(position2)
+    ].join("");
+
+    details_text = result7;
   }
 
   export function refineResult() {
