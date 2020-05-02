@@ -10,5 +10,6 @@
 </script>
 
 <div class="m-2 text-maintxt">
-  {@html book}
+  <!-- {@html book} -->
+  {parsed_book.structure}
 </div>

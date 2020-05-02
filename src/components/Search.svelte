@@ -2,16 +2,13 @@
   import axios from "axios";
   import { flip } from "svelte/animate";
   import { parse } from "node-html-parser";
-  import { beforeUpdate, afterUpdate, onMount } from "svelte";
+  import { beforeUpdate, onMount } from "svelte";
   import { fly } from "svelte/transition";
-  import { saveAs } from "file-saver";
-  import FileDownload from "js-file-download";
-  // import { download } from "downloadjs"
 
   let querie = null;
   let page_number = 0;
   let result = "";
-  let results = "";
+  let results = "ddd";
   let series_checked = false;
   let author_checked = false;
   let book_checked = true;
@@ -53,6 +50,14 @@
     }
     // var idb = window.indexedDB
     var db_books = indexedDB.open("books_db", 1);
+    db_books.onsuccess = function(e) {
+      db = e.target.result;
+      getResult();
+    };
+    db_books.onerror = function(e) {
+      console.log("onerror!");
+      console.dir(e);
+    };
     db_books.onupgradeneeded = function(e) {
       var db = e.target.result;
       if (!db.objectStoreNames.contains("books_store")) {
@@ -65,7 +70,33 @@
           autoIncrement: true
         });
       }
+      if (!db.objectStoreNames.contains("search_result")) {
+        var books_store = db.createObjectStore("search_result", {
+          autoIncrement: true
+        });
+      }
     };
+    function getResult() {
+      var transaction = db.transaction(["search_result"], "readonly");
+      var store = transaction.objectStore("search_result");
+
+      var request = store.get(1);
+
+      request.onerror = function(e) {
+        console.log("Error", e.target.error.name);
+      };
+      request.onsuccess = function(e) {
+        const pre_result = e.target.result;
+        if(typeof(pre_result) === 'string') {
+          result = pre_result
+          refineResult()
+        }
+        // if (results.length > 0) {
+        //   
+        // }
+        // 
+      };
+    }
   });
 
   beforeUpdate(() => {
@@ -107,6 +138,56 @@
       const book = response.data;
       addBookToDB(book, book_name, index);
     });
+  }
+
+  export function saveResult(result) {
+    var db;
+    //check for support
+    if (!("indexedDB" in window)) {
+      console.log("This browser doesn't support IndexedDB");
+      return;
+    }
+    // var idb = window.indexedDB
+    var db_books = indexedDB.open("books_db", 1);
+    db_books.onupgradeneeded = function(e) {
+      var db = e.target.result;
+      if (!db.objectStoreNames.contains("books_store")) {
+        var books_store = db.createObjectStore("books_store", {
+          autoIncrement: true
+        });
+      }
+      if (!db.objectStoreNames.contains("book_names")) {
+        var books_store = db.createObjectStore("book_names", {
+          autoIncrement: true
+        });
+      }
+      if (!db.objectStoreNames.contains("search_result")) {
+        var books_store = db.createObjectStore("search_result", {
+          autoIncrement: true
+        });
+      }
+    };
+
+    db_books.onsuccess = function(e) {
+      db = e.target.result;
+      putResult();
+    };
+    db_books.onerror = function(e) {
+      console.log("onerror!");
+      console.dir(e);
+    };
+
+    function putResult() {
+      var transaction = db.transaction(["search_result"], "readwrite");
+      var store = transaction.objectStore("search_result");
+
+      var request = store.put(result, 1);
+
+      request.onerror = function(e) {
+        console.log("Error", e.target.error.name);
+      };
+      request.onsuccess = function(e) {};
+    }
   }
 
   export function addBookToDB(book, book_name, index) {
@@ -381,6 +462,7 @@
 
     // result = parse(array5)
     results = array6;
+    saveResult(result);
     results_css = "text-maintxt m-2";
     // this.setState({ result2: array6, pagesTotal: pagesTotal.length / 2 });
     // result2 = array6
@@ -505,17 +587,17 @@
     class="bg-white focus:outline-none border border-gray-300 rounded-lg py-2
     px-4 w-9 static m-2"
     type="search"
-    placeholder="Enter book name"
+    placeholder="Введите название книги"
     bind:value={querie} />
   <button
     class="focus:outline-none bg-mainbtn m-2 static rounded-lg py-2 px-4"
     on:click={handleNewSearch}>
-    Search
+    Поиск
   </button>
 </div>
 
 <div class="m-2 text-maintxt">
-  <label class="switch">
+  <!-- <label class="switch">
     <input type="checkbox" bind:checked={series_checked} />
     <span class="slider round" />
   </label>
@@ -532,7 +614,7 @@
     <span class="slider round" />
   </label>
   <span>Книги</span>
-  <span>&nbsp;</span>
+  <span>&nbsp;</span> -->
 
   <div class="Pages">
     <button class={prev_button} on:click={() => changePageNumber(-1)}>

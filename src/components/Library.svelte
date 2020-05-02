@@ -1,5 +1,5 @@
 <script>
-  import { beforeUpdate, afterUpdate, onMount } from "svelte";
+  import { onMount } from "svelte";
   import Book from "./Book.svelte";
 
   let book_list = [];
